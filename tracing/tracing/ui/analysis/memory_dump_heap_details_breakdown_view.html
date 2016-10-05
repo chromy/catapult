@@ -137,6 +137,8 @@ tr.exportTo('tr.ui.analysis', function() {
       this.dimension_ = undefined;
       this.nodes_ = undefined;
       this.aggregationMode_ = undefined;
+      this.lastSortColumnTitle_ = undefined;
+      this.lastSortDescending_ = undefined;
     },
 
     ready: function() {
@@ -144,6 +146,12 @@ tr.exportTo('tr.ui.analysis', function() {
         var viewEvent = new tr.b.Event('enter-node');
         viewEvent.node = tableEvent.tableRow;
         this.dispatchEvent(viewEvent);
+      }.bind(this));
+      this.$.table.addEventListener('sort-column-changed', function(e) {
+        var sortIndex = e.sortColumnIndex;
+        this.lastSortColumnTitle_ = this.$.table.tableColumns[sortIndex].title;
+        console.log('b', this.lastSortColumnTitle_);
+        this.lastSortDescending_ = e.sortDescending;
       }.bind(this));
     },
 
@@ -218,6 +226,23 @@ tr.exportTo('tr.ui.analysis', function() {
       var rows = this.nodes_ || [];
       this.$.table.tableRows = rows;
       this.$.table.tableColumns = this.createColumns_(rows);
+
+      console.log('a', this.lastSortColumnTitle_);
+      console.log('a', this.lastSortDescending_);
+      console.log(this);
+
+      for (var [i, column] of this.$.table.tableColumns.entries()) {
+        console.log(i, column.title, this.lastSortColumnTitle_)
+        if (column.title === this.lastSortColumnTitle_) {
+          console.log('match')
+          this.$.table.sortColumnIndex = i;
+        }
+      }
+      if (this.lastSortDescending_ !== undefined) {
+        console.log('foo2')
+        this.$.table.sortDescending = this.lastSortDescending_;
+      }
+
       this.$.table.rebuild();
     },
 

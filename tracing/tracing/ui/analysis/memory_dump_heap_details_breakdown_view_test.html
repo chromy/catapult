@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2016 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel='import' href='/tracing/core/test_utils.html'>
+<link rel='import' href="/tracing/ui/analysis/memory_dump_heap_details_util.html">
+<link rel='import'
+    href='/tracing/ui/analysis/memory_dump_heap_details_breakdown_view.html'>
+<link rel='import'
+    href='/tracing/ui/analysis/memory_dump_sub_view_test_utils.html'>
+
+<script>
+'use strict';
+tr.b.unittest.testSuite(function() {
+  var AggregationMode = tr.ui.analysis.MemoryColumn.AggregationMode;
+  var HeapDetailsRowDimension = tr.ui.analysis.HeapDetailsRowDimension;
+  var STACK_FRAME = HeapDetailsRowDimension.STACK_FRAME;
+  var OBJECT_TYPE = HeapDetailsRowDimension.OBJECT_TYPE;
+  var MemoryCell = tr.ui.analysis.MemoryCell;
+  var ScalarNumeric = tr.v.ScalarNumeric;
+  var count_smallerIsBetter = tr.b.Unit.byName.count_smallerIsBetter;
+
+  /** @{constructor} */
+  function FakeHeapDumpTreeNode(dimension, title, count) {
+    this.dimension = dimension;
+    this.title = title;
+    this.childNodes = [
+      [STACK_FRAME, []],
+      [OBJECT_TYPE, []],
+    ];
+    this.cells = {'Count': {'fields': [new ScalarNumeric(count_smallerIsBetter, count)]}};
+  }
+
+  FakeHeapDumpTreeNode.prototype = {
+    addChild: function(child) {
+      child.parentNode = this;
+      if (child.dimension === STACK_FRAME)
+        this.childNodes[0][1].push(child);
+      if (child.dimension === OBJECT_TYPE)
+        this.childNodes[1][1].push(child);
+      return child;
+    }
+  }
+  
+  var fakeRoot = new FakeHeapDumpTreeNode(STACK_FRAME, 'root', 0);
+  var childA = new FakeHeapDumpTreeNode(STACK_FRAME, 'childA', 2);
+  var childB = new FakeHeapDumpTreeNode(STACK_FRAME, 'childB', 1);
+  fakeRoot.addChild(childA);
+  fakeRoot.addChild(childB);
+  childA.addChild(new FakeHeapDumpTreeNode(STACK_FRAME, 'grandchildA', 20));
+  childA.addChild(new FakeHeapDumpTreeNode(STACK_FRAME, 'grandchildB', 10));
+  childA.addChild(new FakeHeapDumpTreeNode(STACK_FRAME, 'grandchildC', 30));
+
+  test('instantiate', function() {
+    var viewEl = tr.ui.analysis.createTestPane(
+        'tr-ui-a-memory-dump-heap-details-breakdown-view');
+    viewEl.aggregationMode = AggregationMode.MAX;
+    viewEl.displayedNode = fakeRoot;
+
+    this.addHTMLOutput(viewEl);
+  });
+
+  test('preservesSortOrderWherePossible', function() {
+    var viewEl = tr.ui.analysis.createTestPane(
+        'tr-ui-a-memory-dump-heap-details-breakdown-view');
+    viewEl.aggregationMode = AggregationMode.MAX;
+    viewEl.displayedNode = fakeRoot;
+
+
+    viewEl.displayedNode = childA;
+
+  });
+});
+</script>
+
