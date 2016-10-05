@@ -86,6 +86,9 @@ tr.exportTo('tr.ui.analysis', function() {
         previouslySelectedDimension = previouslySelectedTab.dimension;
       }
 
+      for (var tab of this.$.tabs.tabs) {
+        tab.nodes = undefined
+      }
       this.$.tabs.clearSubViews();
 
       if (this.displayedNode_ === undefined) {
