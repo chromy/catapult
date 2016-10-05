@@ -50,7 +50,7 @@ tr.exportTo('tr.ui.analysis', function() {
 
     created: function() {
       this.displayedNode_ = undefined;
-      this.dimensionToTab_ = {};
+      this.dimensionToTab_ = new Map();
     },
 
     ready: function() {
@@ -94,11 +94,11 @@ tr.exportTo('tr.ui.analysis', function() {
       }
 
       for (var [dimension, children] of this.displayedNode_.childNodes) {
-        if (!this.dimensionToTab_[dimension.label]) {
-          this.dimensionToTab_[dimension.label] = document.createElement(
-              'tr-ui-a-memory-dump-heap-details-breakdown-view-tab');
+        if (!this.dimensionToTab_.has(dimension)) {
+          this.dimensionToTab_.set(dimension, document.createElement(
+              'tr-ui-a-memory-dump-heap-details-breakdown-view-tab'));
         }
-        var tab = this.dimensionToTab_[dimension.label];
+        var tab = this.dimensionToTab_.get(dimension);
         tab.aggregationMode = this.aggregationMode_;
         tab.dimension = dimension;
         tab.nodes = children;

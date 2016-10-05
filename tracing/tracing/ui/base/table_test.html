@@ -1858,6 +1858,12 @@ tr.b.unittest.testSuite(function() {
       cmp: (rowA, rowB) => rowA.a - rowB.a,
     };
 
+    var otherCount = {
+      title: 'Count',
+      value: function(row) { return row.count; },
+      cmp: (rowA, rowB) => rowA.a - rowB.a,
+    };
+
     var table = document.createElement('tr-ui-b-table');
     table.tableColumns = [count];
     table.sortColumnIndex = 0;
@@ -1869,11 +1875,14 @@ tr.b.unittest.testSuite(function() {
     table.rebuild();
     assert.strictEqual(1, table.sortColumnIndex);
 
+    table.tableColumns = [otherCount, name];
+    table.rebuild();
+    assert.strictEqual(0, table.sortColumnIndex);
+
     table.tableColumns = [name];
     table.rebuild();
     assert.isUndefined(table.sortColumnIndex);
   });
-
 
   test('userCanModifySortOrder', function() {
     var table = document.createElement('tr-ui-b-table');

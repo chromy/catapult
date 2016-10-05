@@ -376,7 +376,10 @@ tr.exportTo('tr.ui.b', function() {
         }
       }
 
-      // Try to preserve users sort choice
+      // Try to preserve the user's sort choice.
+      // This is a 'best-effort' attempt, for example we compare columns by
+      // thier titles which can be HTML nodes in which case we might consider
+      // them different even if they look the same to the user.
       var sortIndex = undefined;
       var currentSortColumn = this.tableColumns[this.sortColumnIndex_];
       if (currentSortColumn) {
