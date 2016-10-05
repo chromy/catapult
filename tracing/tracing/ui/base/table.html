@@ -386,6 +386,7 @@ tr.exportTo('tr.ui.b', function() {
         for (var [i, column] of columns.entries()) {
           if (currentSortColumn.title === column.title) {
             sortIndex = i;
+            break;
           }
         }
       }

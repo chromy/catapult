@@ -1867,6 +1867,7 @@ tr.b.unittest.testSuite(function() {
     var table = document.createElement('tr-ui-b-table');
     table.tableColumns = [count];
     table.sortColumnIndex = 0;
+    table.sortDescending = true;
     table.rebuild();
 
     this.addHTMLOutput(table);
@@ -1874,10 +1875,13 @@ tr.b.unittest.testSuite(function() {
     table.tableColumns = [name, count];
     table.rebuild();
     assert.strictEqual(1, table.sortColumnIndex);
+    assert.isTrue(table.sortDescending);
 
+    table.sortDescending = false;
     table.tableColumns = [otherCount, name];
     table.rebuild();
     assert.strictEqual(0, table.sortColumnIndex);
+    assert.isFalse(table.sortDescending);
 
     table.tableColumns = [name];
     table.rebuild();
