@@ -17,27 +17,33 @@ BUILD_BOT_REPORT_URL = 'https://build.chromium.org/p/chromium.perf/builders/Andr
 gsutil = sh.Command('gsutil')
 unzip = sh.Command('unzip')
 mv = sh.Command('mv')
+git = sh.Command('git')
+touch = sh.Command('touch')
 run_benchmark = sh.Command('/usr/local/google/home/hjd/proj/chromium/src/tools/perf/run_benchmark')
 
-def commit_order(commits, start=None, end=None):
-  start = start if start else min(commits)
-  end = end if end else max(commits)
-
+def best_commit_order(start, end):
   if end < start:
     return []
 
-  if end == start:
-    return [] if start in commits else [start]
+  new = [start]
+  if end != start:
+    new.append(end)
 
-  seen = set(commits)
-  new = []
-  gap = end - start
-  while gap:
-    more = [i for i in range(start, end+1, gap) if i not in seen]
-    seen.update(more)
-    new.extend(more)
-    gap /= 2
+  seen = set(new)
+  n = end - start + 1
+  while len(new) < n:
+    s = sorted(new)
+    for i, j in zip(s, s[1:]):
+      mid = (j - i) / 2 + i
+      if mid not in seen:
+        new.append(mid)
+        seen.add(mid)
   return new
+
+def commit_order(seen, start=None, end=None):
+  start = start if start else min(seen)
+  end = end if end else max(seen)
+  return [c for c in best_commit_order(start, end) if c not in seen]
 
 def best_commit_to_test_next(commits, start=None, end=None):
   order = commit_order(commits, start, end)
@@ -61,14 +67,18 @@ def url_to_gs(url):
   gs = url.replace('https://storage.cloud.google.com/', 'gs://')
   return gs
 
+#def get_url_for_commit(commit):
+#  r = requests.get(BUILD_BOT_REPORT_URL.format(commit))
+#  assert r.status_code == 200
+#  tree = html.fromstring(r.text)
+#  links = tree.xpath("//a[text()='gsutil.upload']")
+#  assert links
+#  url = links[0].get('href')
+#  return url
+
 def get_url_for_commit(commit):
-  r = requests.get(BUILD_BOT_REPORT_URL.format(commit))
-  assert r.status_code == 200
-  tree = html.fromstring(r.text)
-  links = tree.xpath("//a[text()='gsutil.upload']")
-  assert links
-  url = links[0].get('href')
-  return url
+  return 'https://storage.cloud.google.com/chrome-test-builds/official-by-commit/Android Builder/full-build-linux_{}.zip'.format(commit)
+
 
 def commit_to_apk_path(commit):
   name = '{}.apk'.format(commit)
@@ -114,15 +124,18 @@ def test_build(commit):
   args = [
       "run",
       "--browser=exact",
-      "system_health.memory_mobile",
-      "--story-filter=load:search:google",
+      "memory.top_10_mobile_stress",
+      #"--story-filter=load:search:google",
+      "--story-filter=after_https_m_facebook_com_rihanna",
       "--browser-executable={}".format(commit_to_apk_path(commit)),
       #"--output={}".format(commit_to_result_path(commit)),
+      "--results-label={}".format(commit),
       "--output-dir={}".format(RESULT_DIR),
-      "--output-format=json"
+      #"--output-format=json",
   ]
   print 'Running', 'run_benchmark', ' '.join(args)
   print run_benchmark(args)
+  touch(commit_to_result_path(commit))
   print '...done'
 
 def bisect(start, end):
@@ -132,10 +145,20 @@ def bisect(start, end):
     if next_commit is None:
       print 'Done.'
       break
-    print ''.join([c in tested_commits for c in range(start, end+1)].map(lambda c: '*.'[c]))
-    print ''.join([c is next_commit    for c in range(start, end+1)].map(lambda c: '^ '[c]))
+    print 'Done:', ''.join(map(lambda c: '.*'[c], [c in tested_commits for c in range(start, end+1)]))
+    print 'Next:', ''.join(map(lambda c: ' ^'[c], [c == next_commit    for c in range(start, end+1)]))
     fetch_build(next_commit)
     test_build(next_commit)
+
+def dry_run(start, end):
+  tested_commits = []
+  while True:
+    next_commit = best_commit_to_test_next(tested_commits, start, end)
+    if next_commit is None:
+      print 'Done.'
+      break
+    tested_commits.append(next_commit)
+    print 'Done:', ''.join(map(lambda c: '.*'[c], [c in tested_commits for c in range(start, end+1)]))
 
 def test_commit_order_empty():
   assert commit_order([], 2, 1) == []
@@ -156,10 +179,13 @@ def test_commit_order_very_big_gap():
   assert commit_order([], 1, 5) == [1, 5, 3, 2, 4]
 
 def test_commit_order_very_very_big_gap():
-  assert commit_order([], 1, 10) == [1, 10, 5, 9, 3, 7, 2, 4, 6, 8]
+  assert commit_order([], 1, 10) == [1, 10, 5, 3, 7, 2, 4, 6, 8, 9]
 
 def test_commit_order_copes_with_initially_seen():
   assert commit_order([1, 10, 9, 8], 1, 10) == [5, 3, 7, 2, 4, 6]
+
+def test_commit_order_copes_with_odd_lengths():
+  assert commit_order([], 1, 9) == [1, 9, 5, 3, 7, 2, 4, 6, 8]
 
 def test_commit_order_copes_with_offsets():
   assert commit_order([], 101, 104) == [101, 104, 102, 103]
@@ -177,6 +203,7 @@ def test():
   test_commit_order_very_big_gap()
   test_commit_order_very_very_big_gap()
   test_commit_order_copes_with_initially_seen()
+  test_commit_order_copes_with_odd_lengths()
   test_commit_order_copes_with_offsets()
 
 def as_int(n, error='Expected int'):
@@ -193,7 +220,6 @@ cantors_bisect.py test [commit]
 """
 
 if __name__ == '__main__':
-  test()
   if len(sys.argv) < 2:
     print usage()
     exit()
@@ -211,6 +237,15 @@ if __name__ == '__main__':
     start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
     end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
     bisect(start_commit, end_commit)
+  elif cmd == 'dry' and len(sys.argv) >= 4:
+    start_commit_raw = sys.argv[2]
+    end_commit_raw = sys.argv[3]
+    start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
+    end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
+    dry_run(start_commit, end_commit)
+  elif cmd == 'test':
+    test()
   else:
     print usage()
+  test()
 
