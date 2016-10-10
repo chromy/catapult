@@ -9,9 +9,8 @@ import sh
 from lxml import html
 import tempfile
 
-ZIP_DIR = 'zips'
-BUILD_DIR = 'builds'
-RESULT_DIR = 'results'
+DEFAULT_BUILD_DIR = 'builds'
+DEFAULT_RESULT_DIR = 'results'
 
 BUILD_BOT_REPORT_URL = 'https://build.chromium.org/p/chromium.perf/builders/Android%20Builder/builds/{}'
 gsutil = sh.Command('gsutil')
@@ -20,6 +19,150 @@ mv = sh.Command('mv')
 git = sh.Command('git')
 touch = sh.Command('touch')
 run_benchmark = sh.Command('/usr/local/google/home/hjd/proj/chromium/src/tools/perf/run_benchmark')
+
+class RealBackend(object):
+  def mv(self, src, target):
+    mv(src, target)
+
+  def ensure_directory(self, path):
+    if not os.path.exists(path):
+      os.makedirs(path)
+
+  def run_benchmark(self, *args):
+    return run_benchmark(*args)
+
+  def unzip(self, *args):
+    unzip(*args)
+
+  def gsutil(self, *args):
+    gsutil(*args)
+
+  def touch(self, *args):
+    touch(*args)
+
+  def tested_build(self, commit):
+    pass
+
+  def fetched_build(self, commit):
+    pass
+
+  def get_tested_commits(self, results_dir, wanted_suffix='json'):
+    commits = []
+    for name in os.listdir(results_dir):
+      commit, suffix = name.split('.')
+      if suffix == wanted_suffix:
+        commits.append(as_int(commit))
+    return commits
+
+  def has_build(self, commit):
+    return os.path.exists(commit_to_apk_path(commit))
+
+class FakeBackend(object):
+  def __init__(self):
+    self.ensured_directories = []
+    self.tested = []
+    self.fetched = []
+
+  def mv(self, src, target):
+    print 'MV', src, target
+
+  def ensure_directory(self, path):
+    if path not in self.ensured_directories:
+      print 'MKDIR', path
+      self.ensured_directories.append(path)
+
+  def run_benchmark(self, *args):
+    print 'RUN_BENCHMARK', ' '.join(args)
+    return '[Benchmark output would appear here.]'
+
+  def unzip(self, *args):
+    print 'UNZIP', ' '.join(args)
+
+  def gsutil(self, *args):
+    print 'GSUTIL', ' '.join(args)
+
+  def touch(self, *args):
+    print 'TOUCH', ' '.join(args)
+
+  def tested_build(self, commit):
+    self.tested.append(commit)
+
+  def fetched_build(self, commit):
+    self.fetched.append(commit)
+
+  def get_tested_commits(self, results_dir, wanted_suffix='json'):
+    return self.tested
+
+  def has_build(self, commit):
+    return commit in self.fetched
+
+class Config(object):
+  def __init__(self, results_directory, build_directory):
+    self.results_dir = results_directory
+    self.build_dir = build_directory
+
+class Bisector(object):
+  def __init__(self, config, backend):
+    self.config = config
+    self.backend = backend
+
+  def bisect(self, benchmark, start, end):
+    self.backend.ensure_directory(self.config.build_dir)
+    self.backend.ensure_directory(self.config.results_dir)
+    while True:
+      tested_commits = backend.get_tested_commits(self.config.results_dir)
+      next_commit = best_commit_to_test_next(tested_commits, start, end)
+      if next_commit is None:
+        print 'Done.'
+        break
+      print 'Done:', ''.join(map(lambda c: '.*'[c], [c in tested_commits for c in range(start, end+1)]))
+      print 'Next:', ''.join(map(lambda c: ' ^'[c], [c == next_commit    for c in range(start, end+1)]))
+      self.fetch_build(next_commit)
+      self.test_build(benchmark, next_commit)
+
+  def fetch_build(self, commit):
+    self.backend.ensure_directory(self.config.build_dir)
+    print 'Fetching zip for commit {}'.format(commit)
+    url = get_url_for_commit(commit)
+    print 'Zip for commit {} lives at {}'.format(commit, url)
+    print 'Downloading...',
+    zip_path = get_tempory_zip_path(commit)
+    self.backend.gsutil('cp', url_to_gs(url), zip_path)
+    print ' ...done'
+    print 'Extracting apk...',
+    self.backend.unzip('-j', zip_path, 'ChromePublic.apk', '-d', self.config.build_dir)
+    self.backend.mv(os.path.join(self.config.build_dir, 'ChromePublic.apk'), commit_to_apk_path(self.config.build_dir, commit))
+    print ' ...done'
+    self.backend.fetched_build(commit)
+
+  def test_build(self, benchmark, commit):
+    self.backend.ensure_directory(self.config.results_dir)
+    print 'Testing commit {}'.format(commit)
+    args = [
+        "run",
+        benchmark,
+        "--browser=exact",
+        #"--story-filter=load:search:google",
+        "--story-filter=after_https_m_facebook_com_rihanna",
+        "--browser-executable={}".format(commit_to_apk_path(self.config.build_dir, commit)),
+        #"--output={}".format(commit_to_result_path(commit)),
+        "--results-label={}".format(commit),
+        "--output-dir={}".format(self.config.results_dir),
+        #"--output-format=json",
+    ]
+    print 'Running', 'run_benchmark', ' '.join(args)
+    print self.backend.run_benchmark(*args)
+    self.backend.touch(commit_to_result_path(self.config.results_dir, commit))
+    print '...done'
+    self.backend.tested_build(commit)
+
+  def ensure_build_present(self, commit):
+    print 'Looking for build for commit {}'.format(commit),
+    if self.backend.has_build(commit):
+      print ' ...found'
+    else:
+      print ' ...not found'
+      self.fetch_build(commit)
 
 def best_commit_order(start, end):
   if end < start:
@@ -51,18 +194,6 @@ def best_commit_to_test_next(commits, start=None, end=None):
     return None
   return order[0]
 
-def get_tested_commits(wanted_suffix='json'):
-  commits = []
-  for name in os.listdir(RESULT_DIR):
-    commit, suffix = name.split('.')
-    if suffix == wanted_suffix:
-      commits.append(as_int(commit))
-  return commits
-
-def ensure_directory(path):
-  if not os.path.exists(path):
-    os.makedirs(path)
-
 def url_to_gs(url):
   gs = url.replace('https://storage.cloud.google.com/', 'gs://')
   return gs
@@ -79,76 +210,18 @@ def url_to_gs(url):
 def get_url_for_commit(commit):
   return 'https://storage.cloud.google.com/chrome-test-builds/official-by-commit/Android Builder/full-build-linux_{}.zip'.format(commit)
 
-
-def commit_to_apk_path(commit):
+def commit_to_apk_path(build_dir, commit):
   name = '{}.apk'.format(commit)
-  return os.path.join(BUILD_DIR, name)
+  return os.path.join(build_dir, name)
 
-def commit_to_result_path(commit):
+def commit_to_result_path(results_dir, commit):
   name = '{}.json'.format(commit)
-  return os.path.join(RESULT_DIR, name)
+  return os.path.join(results_dir, name)
 
 def get_tempory_zip_path(commit):
   directory = tempfile.mkdtemp(suffix='chrome_android_zip'.format(commit))
   return os.path.join(directory, '{}.zip'.format(commit))
 
-def has_build(commit):
-  ensure_directory(BUILD_DIR)
-  return os.path.exists(commit_to_apk_path(commit))
-
-def fetch_build(commit):
-  print 'Fetching zip for commit {}'.format(commit)
-  url = get_url_for_commit(commit)
-  print 'Zip for commit {} lives at {}'.format(commit, url)
-  print 'Downloading...',
-  ensure_directory(BUILD_DIR)
-  zip_path = get_tempory_zip_path(commit)
-  gsutil('cp', url_to_gs(url), zip_path)
-  print ' ...done'
-  print 'Extracting apk...',
-  unzip('-j', zip_path, 'ChromePublic.apk', '-d', BUILD_DIR)
-  mv(os.path.join(BUILD_DIR, 'ChromePublic.apk'), commit_to_apk_path(commit))
-  print ' ...done'
-
-def ensure_build_present(commit):
-  print 'Looking for build for commit {}'.format(commit),
-  if has_build(commit):
-    print ' ...found'
-  else:
-    print ' ...not found'
-    fetch_build(commit)
-
-def test_build(commit):
-  print 'Testing commit {}'.format(commit)
-  ensure_directory(RESULT_DIR)
-  args = [
-      "run",
-      "--browser=exact",
-      "memory.top_10_mobile_stress",
-      #"--story-filter=load:search:google",
-      "--story-filter=after_https_m_facebook_com_rihanna",
-      "--browser-executable={}".format(commit_to_apk_path(commit)),
-      #"--output={}".format(commit_to_result_path(commit)),
-      "--results-label={}".format(commit),
-      "--output-dir={}".format(RESULT_DIR),
-      #"--output-format=json",
-  ]
-  print 'Running', 'run_benchmark', ' '.join(args)
-  print run_benchmark(args)
-  touch(commit_to_result_path(commit))
-  print '...done'
-
-def bisect(start, end):
-  while True:
-    tested_commits = get_tested_commits()
-    next_commit = best_commit_to_test_next(tested_commits, start, end)
-    if next_commit is None:
-      print 'Done.'
-      break
-    print 'Done:', ''.join(map(lambda c: '.*'[c], [c in tested_commits for c in range(start, end+1)]))
-    print 'Next:', ''.join(map(lambda c: ' ^'[c], [c == next_commit    for c in range(start, end+1)]))
-    fetch_build(next_commit)
-    test_build(next_commit)
 
 def dry_run(start, end):
   tested_commits = []
@@ -212,40 +285,82 @@ def as_int(n, error='Expected int'):
   except ValueError:
     raise Exception(error)
 
-def usage():
-  return """
-cantors_bisect.py fetch [commit]
-cantors_bisect.py bisect [start_commit] [end_commit]
-cantors_bisect.py test [commit]
-"""
+def get_arg(args, name):
+  if name not in args:
+    display_usage_and_exit(1)
+  index = len(args) - 1 - args[::-1].index(name)
+  if index + 1 >= len(args):
+    display_usage_and_exit(1)
+  arg = args[index + 1]
+  if arg.startswith('-'):
+    display_usage_and_exit(1)
+  return arg
+
+def display_usage_and_exit(code):
+  display_usage()
+  exit(code)
+
+def display_usage():
+  print """Dumb local bisect.
+
+Usage:
+  cantors_bisect.py bisect <benchmark> <start_commit> <end_commit>
+  cantors_bisect.py fetch <commit>
+  cantors_bisect.py test <benchmark> <commit>
+  cantors_bisect.py help
+  cantors_bisect.py (-h|--help)
+
+Options:
+  -h --help           Display this screen.
+  -n --dry-run        Print what would happen but don't actually do anything.
+  --build_dir <dir>   Directory to put APKs in (default: ./build)
+  --result_dir <dir>  Directory to put results in (default: ./results)"""
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:
-    print usage()
+    display_usage()
     exit()
 
+  backend = RealBackend()
+  if '-n' in sys.argv or '--dry-run' in sys.argv:
+    backend = FakeBackend()
+
+  results_dir = DEFAULT_RESULT_DIR
+  if '--results_dir' in sys.argv:
+    results_dir = get_arg(sys.argv, '--results_dir')
+
+  build_dir = DEFAULT_BUILD_DIR
+  if '--build_dir' in sys.argv:
+    build_dir = get_arg(sys.argv, '--build_dir')
+
+  config = Config(results_dir, build_dir)
+  bisector = Bisector(config, backend)
+
   cmd = sys.argv[1]
-  if cmd == 'fetch' and len(sys.argv) >= 3:
+  if cmd == 'help' or '--help' in sys.argv or '-h' in sys.argv:
+    display_usage()
+  elif cmd == 'fetch' and len(sys.argv) >= 3:
     commit = as_int(sys.argv[2])
-    ensure_build_present(commit)
-  elif cmd == 'test' and len(sys.argv) >= 3:
-    commit = as_int(sys.argv[2])
-    test_build(commit)
-  elif cmd == 'bisect' and len(sys.argv) >= 4:
-    start_commit_raw = sys.argv[2]
-    end_commit_raw = sys.argv[3]
+    bisector.ensure_build_present(commit)
+  elif cmd == 'test' and len(sys.argv) >= 4:
+    benchmark = sys.argv[2]
+    commit = as_int(sys.argv[3])
+    bisector.test_build(benchmark, commit)
+  elif cmd == 'bisect' and len(sys.argv) >= 5:
+    benchmark = sys.argv[2]
+    start_commit_raw = sys.argv[3]
+    end_commit_raw = sys.argv[4]
     start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
     end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
-    bisect(start_commit, end_commit)
+    bisector.bisect(benchmark, start_commit, end_commit)
   elif cmd == 'dry' and len(sys.argv) >= 4:
     start_commit_raw = sys.argv[2]
     end_commit_raw = sys.argv[3]
     start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
     end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
     dry_run(start_commit, end_commit)
-  elif cmd == 'test':
+  elif cmd == 'selftest':
     test()
   else:
-    print usage()
-  test()
+    display_usage()
 
