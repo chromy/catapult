@@ -4,13 +4,12 @@
 """
 import sys
 import os
-import requests
 import sh
-from lxml import html
 import tempfile
 
 DEFAULT_BUILD_DIR = 'builds'
 DEFAULT_RESULT_DIR = 'results'
+DEFAULT_RUN_BENCHMARK_PATH = 'tools/perf/run_benchmark'
 
 BUILD_BOT_REPORT_URL = 'https://build.chromium.org/p/chromium.perf/builders/Android%20Builder/builds/{}'
 gsutil = sh.Command('gsutil')
@@ -18,7 +17,6 @@ unzip = sh.Command('unzip')
 mv = sh.Command('mv')
 git = sh.Command('git')
 touch = sh.Command('touch')
-run_benchmark = sh.Command('/usr/local/google/home/hjd/proj/chromium/src/tools/perf/run_benchmark')
 
 class RealBackend(object):
   def mv(self, src, target):
@@ -28,7 +26,8 @@ class RealBackend(object):
     if not os.path.exists(path):
       os.makedirs(path)
 
-  def run_benchmark(self, *args):
+  def run_benchmark(self, path, *args):
+    run_benchmark = sh.Command(path)
     return run_benchmark(*args)
 
   def unzip(self, *args):
@@ -71,8 +70,8 @@ class FakeBackend(object):
       print 'MKDIR', path
       self.ensured_directories.append(path)
 
-  def run_benchmark(self, *args):
-    print 'RUN_BENCHMARK', ' '.join(args)
+  def run_benchmark(self, path, *args):
+    print 'RUN_BENCHMARK', path, ' '.join(args)
     return '[Benchmark output would appear here.]'
 
   def unzip(self, *args):
@@ -97,16 +96,18 @@ class FakeBackend(object):
     return commit in self.fetched
 
 class Config(object):
-  def __init__(self, results_directory, build_directory):
+  def __init__(self, results_directory, build_directory, run_benchmark_path):
     self.results_dir = results_directory
     self.build_dir = build_directory
+    self.run_benchmark_path = run_benchmark_path
 
 class Bisector(object):
   def __init__(self, config, backend):
     self.config = config
     self.backend = backend
 
-  def bisect(self, benchmark, start, end):
+  def bisect(self, benchmark, start, end, extra_args=None):
+    extra_args = extra_args if extra_args else []
     self.backend.ensure_directory(self.config.build_dir)
     self.backend.ensure_directory(self.config.results_dir)
     while True:
@@ -118,13 +119,12 @@ class Bisector(object):
       print 'Done:', ''.join(map(lambda c: '.*'[c], [c in tested_commits for c in range(start, end+1)]))
       print 'Next:', ''.join(map(lambda c: ' ^'[c], [c == next_commit    for c in range(start, end+1)]))
       self.fetch_build(next_commit)
-      self.test_build(benchmark, next_commit)
+      self.test_build(benchmark, next_commit, extra_args)
 
   def fetch_build(self, commit):
     self.backend.ensure_directory(self.config.build_dir)
-    print 'Fetching zip for commit {}'.format(commit)
     url = get_url_for_commit(commit)
-    print 'Zip for commit {} lives at {}'.format(commit, url)
+    print 'Fetching zip for commit {} from {}'.format(commit, url)
     print 'Downloading...',
     zip_path = get_tempory_zip_path(commit)
     self.backend.gsutil('cp', url_to_gs(url), zip_path)
@@ -135,33 +135,32 @@ class Bisector(object):
     print ' ...done'
     self.backend.fetched_build(commit)
 
-  def test_build(self, benchmark, commit):
+  def test_build(self, benchmark, commit, extra_args=None):
+    extra_args = extra_args if extra_args else []
     self.backend.ensure_directory(self.config.results_dir)
-    print 'Testing commit {}'.format(commit)
     args = [
         "run",
         benchmark,
         "--browser=exact",
-        #"--story-filter=load:search:google",
-        "--story-filter=after_https_m_facebook_com_rihanna",
         "--browser-executable={}".format(commit_to_apk_path(self.config.build_dir, commit)),
-        #"--output={}".format(commit_to_result_path(commit)),
         "--results-label={}".format(commit),
         "--output-dir={}".format(self.config.results_dir),
-        #"--output-format=json",
-    ]
+        "--output-format=chartjson",
+    ] + extra_args
     print 'Running', 'run_benchmark', ' '.join(args)
-    print self.backend.run_benchmark(*args)
-    self.backend.touch(commit_to_result_path(self.config.results_dir, commit))
+    print self.backend.run_benchmark(self.config.run_benchmark_path, *args)
+    output_path = os.path.join(self.config.results_dir, 'results-chart.json')
+    result_path = commit_to_result_path(self.config.results_dir, commit)
+    self.backend.mv(output_path, result_path)
     print '...done'
     self.backend.tested_build(commit)
 
   def ensure_build_present(self, commit):
     print 'Looking for build for commit {}'.format(commit),
     if self.backend.has_build(commit):
-      print ' ...found'
+      print ' ...found it.'
     else:
-      print ' ...not found'
+      print " ..couldn't find it."
       self.fetch_build(commit)
 
 def best_commit_order(start, end):
@@ -198,6 +197,8 @@ def url_to_gs(url):
   gs = url.replace('https://storage.cloud.google.com/', 'gs://')
   return gs
 
+# import requests
+# from lxml import html
 #def get_url_for_commit(commit):
 #  r = requests.get(BUILD_BOT_REPORT_URL.format(commit))
 #  assert r.status_code == 200
@@ -288,13 +289,16 @@ def as_int(n, error='Expected int'):
 def get_arg(args, name):
   if name not in args:
     display_usage_and_exit(1)
-  index = len(args) - 1 - args[::-1].index(name)
+  index = rfind(args, name)
   if index + 1 >= len(args):
     display_usage_and_exit(1)
   arg = args[index + 1]
   if arg.startswith('-'):
     display_usage_and_exit(1)
   return arg
+
+def rfind(l, x):
+  return len(l) - 1 - l[::-1].index(x)
 
 def display_usage_and_exit(code):
   display_usage()
@@ -304,7 +308,7 @@ def display_usage():
   print """Dumb local bisect.
 
 Usage:
-  cantors_bisect.py bisect <benchmark> <start_commit> <end_commit>
+  cantors_bisect.py bisect <benchmark> <start_commit> <end_commit> [-- --story-filter=foo ...]
   cantors_bisect.py fetch <commit>
   cantors_bisect.py test <benchmark> <commit>
   cantors_bisect.py help
@@ -313,27 +317,41 @@ Usage:
 Options:
   -h --help           Display this screen.
   -n --dry-run        Print what would happen but don't actually do anything.
-  --build_dir <dir>   Directory to put APKs in (default: ./build)
-  --result_dir <dir>  Directory to put results in (default: ./results)"""
+  --build-dir <dir>   Directory to put APKs in (default: ./build)
+  --result-dir <dir>  Directory to put results in (default: ./results)
+  --run-benchmark-path <path> Path to script (default: ./tools/perf/run_benchmark)"""
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:
     display_usage()
     exit()
 
+  args = []
+  rest = []
+  if '--' in sys.argv:
+    index = rfind(sys.argv, '--')
+    rest = sys.argv[index+1:]
+    args = sys.argv[:index]
+  else:
+    args = sys.argv
+
   backend = RealBackend()
   if '-n' in sys.argv or '--dry-run' in sys.argv:
     backend = FakeBackend()
 
   results_dir = DEFAULT_RESULT_DIR
-  if '--results_dir' in sys.argv:
-    results_dir = get_arg(sys.argv, '--results_dir')
+  if '--results-dir' in sys.argv:
+    results_dir = get_arg(sys.argv, '--results-dir')
 
   build_dir = DEFAULT_BUILD_DIR
-  if '--build_dir' in sys.argv:
-    build_dir = get_arg(sys.argv, '--build_dir')
+  if '--build-dir' in sys.argv:
+    build_dir = get_arg(sys.argv, '--build-dir')
 
-  config = Config(results_dir, build_dir)
+  run_benchmark_path = DEFAULT_RUN_BENCHMARK_PATH
+  if '--run-benchmark-path' in sys.argv:
+    run_benchmark_path = get_arg(sys.argv, '--run-benchmark-path')
+
+  config = Config(results_dir, build_dir, run_benchmark_path)
   bisector = Bisector(config, backend)
 
   cmd = sys.argv[1]
@@ -352,7 +370,7 @@ if __name__ == '__main__':
     end_commit_raw = sys.argv[4]
     start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
     end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
-    bisector.bisect(benchmark, start_commit, end_commit)
+    bisector.bisect(benchmark, start_commit, end_commit, extra_args=rest)
   elif cmd == 'dry' and len(sys.argv) >= 4:
     start_commit_raw = sys.argv[2]
     end_commit_raw = sys.argv[3]
