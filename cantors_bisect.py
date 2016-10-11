@@ -185,7 +185,7 @@ class Csver(object):
     self.backend = backend
 
   def json_for_commit(self, commit):
-    path  = commit_to_result_path(self.config.results_dir, commit)
+    path = commit_to_result_path(self.config.results_dir, commit)
     return read_json(path)
 
   def json_to_rows(self, j, commit):
@@ -364,6 +364,7 @@ Usage:
   cantors_bisect.py bisect <benchmark> <start_commit> <end_commit> [-- --story-filter=foo ...]
   cantors_bisect.py fetch <commit>
   cantors_bisect.py test <benchmark> <commit>
+  cantors_bisect.py csv <path>
   cantors_bisect.py help
   cantors_bisect.py (-h|--help)
 
@@ -372,7 +373,31 @@ Options:
   -n --dry-run        Print what would happen but don't actually do anything.
   --build-dir <dir>   Directory to put APKs in (default: ./build)
   --result-dir <dir>  Directory to put results in (default: ./results)
-  --run-benchmark-path <path> Path to script (default: ./tools/perf/run_benchmark)"""
+  --run-benchmark-path <path> Path to script (default: ./tools/perf/run_benchmark)
+
+Detail:
+  bisect <benchmark> <start_commit> <end_commit> [-- ...extra run_benchmark args]
+    Runs the benchmark <benchmark> on a build for each commit in the range
+    [start_commit...end_commit]. Outputs the results to files in the result-dir
+    named [commit_number].json
+
+    Tests the range in the sensible order given that run_benchmark takes a long
+    time and our script could be killed at anytime. For example the five commits:
+    .....
+    are tested in the order:
+    14352
+
+  fetch <commit>
+    Download the APK for the commit numbered <commit> put it in to build-dir.
+
+  test <benchmark> <commit>
+    Runs the benchmark <benchmark> on the APK for <commit> and puts the result
+    into a file named [commit_number].json in result-dir.
+
+  csv <path>
+    Collect all the results in result-dir, combine them and output the result
+    at <path> in csv format with the columns [commit, metric, page, value].
+"""
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:
