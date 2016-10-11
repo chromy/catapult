@@ -4,6 +4,7 @@
 """
 import sys
 import os
+import json
 import sh
 import tempfile
 
@@ -18,6 +19,18 @@ mv = sh.Command('mv')
 git = sh.Command('git')
 touch = sh.Command('touch')
 
+def read_json(path):
+  with open(path) as f:
+    return json.load(f)
+
+def get_tested_commits(results_dir, wanted_suffix='json'):
+  commits = []
+  for name in os.listdir(results_dir):
+    commit, suffix = name.split('.')
+    if suffix == wanted_suffix:
+      commits.append(as_int(commit))
+  return commits
+
 class RealBackend(object):
   def mv(self, src, target):
     mv(src, target)
@@ -25,6 +38,10 @@ class RealBackend(object):
   def ensure_directory(self, path):
     if not os.path.exists(path):
       os.makedirs(path)
+
+  def write_to_output_file(self, path, s):
+    with open(path, 'w') as f:
+      f.write(s)
 
   def run_benchmark(self, path, *args):
     run_benchmark = sh.Command(path)
@@ -46,12 +63,7 @@ class RealBackend(object):
     pass
 
   def get_tested_commits(self, results_dir, wanted_suffix='json'):
-    commits = []
-    for name in os.listdir(results_dir):
-      commit, suffix = name.split('.')
-      if suffix == wanted_suffix:
-        commits.append(as_int(commit))
-    return commits
+    return get_tested_commits(results_dir, wanted_suffix)
 
   def has_build(self, commit):
     return os.path.exists(commit_to_apk_path(commit))
@@ -69,6 +81,10 @@ class FakeBackend(object):
     if path not in self.ensured_directories:
       print 'MKDIR', path
       self.ensured_directories.append(path)
+
+  def write_to_output_file(self, path, s):
+    print '[Would have written the following to {}]'.format(path)
+    print s
 
   def run_benchmark(self, path, *args):
     print 'RUN_BENCHMARK', path, ' '.join(args)
@@ -111,7 +127,7 @@ class Bisector(object):
     self.backend.ensure_directory(self.config.build_dir)
     self.backend.ensure_directory(self.config.results_dir)
     while True:
-      tested_commits = backend.get_tested_commits(self.config.results_dir)
+      tested_commits = self.backend.get_tested_commits(self.config.results_dir)
       next_commit = best_commit_to_test_next(tested_commits, start, end)
       if next_commit is None:
         print 'Done.'
@@ -162,6 +178,44 @@ class Bisector(object):
     else:
       print " ..couldn't find it."
       self.fetch_build(commit)
+
+class Csver(object):
+  def __init__(self, config, backend):
+    self.config = config
+    self.backend = backend
+
+  def json_for_commit(self, commit):
+    path  = commit_to_result_path(self.config.results_dir, commit)
+    return read_json(path)
+
+  def json_to_rows(self, j, commit):
+    charts = j['charts']
+    for metric, page in charts.items():
+      if metric == 'trace':
+        continue
+      for page_name, results_for_page in page.items():
+        if page_name == 'summary':
+          continue
+        for value in results_for_page['values']:
+          yield commit, metric, page_name, value
+
+  def rows_for_commit(self, commit):
+    j = self.json_for_commit(commit)
+    return self.json_to_rows(j, commit)
+
+  def rows_for_commits(self, commits):
+    return [row for commit in commits for row in self.rows_for_commit(commit)]
+
+  def write_results_to_csv(self, path):
+    commits = get_tested_commits(self.config.results_dir)
+    rows = self.rows_for_commits(commits)
+    columns = ['commit', 'metric', 'page', 'value']
+
+    lines = []
+    for row in [columns] + rows:
+      lines.append(','.join(map(str, row)))
+    s = '\n'.join(lines)
+    self.backend.write_to_output_file(path, s)
 
 def best_commit_order(start, end):
   if end < start:
@@ -222,7 +276,6 @@ def commit_to_result_path(results_dir, commit):
 def get_tempory_zip_path(commit):
   directory = tempfile.mkdtemp(suffix='chrome_android_zip'.format(commit))
   return os.path.join(directory, '{}.zip'.format(commit))
-
 
 def dry_run(start, end):
   tested_commits = []
@@ -377,6 +430,10 @@ if __name__ == '__main__':
     start_commit = as_int(start_commit_raw, 'start was "{}" should be an int'.format(start_commit_raw))
     end_commit = as_int(end_commit_raw, 'end was "{}" should be an int'.format(end_commit_raw))
     dry_run(start_commit, end_commit)
+  elif cmd == 'csv' and len(sys.argv) >= 3:
+    path = sys.argv[2]
+    csver = Csver(config, backend)
+    csver.write_results_to_csv(path)
   elif cmd == 'selftest':
     test()
   else:
