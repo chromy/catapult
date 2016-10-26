@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<!--
+Copyright 2016 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/dashboard/elements/memory-test-picker.html">
+<link rel="import" href="/dashboard/static/testing_common.html">
+
+<link rel="import" href="/tracing/core/test_utils.html">
+
+<script>
+'use strict';
+
+var MOCK_SUBTEST_DICT = {
+  'memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg': {
+    'sub_tests': {
+      'background_media': {
+        'sub_tests': {
+          'background_media_imgur': {
+            'sub_tests': {}
+          }
+        }
+      },
+      'browse_social': {
+        'sub_tests': {
+          'browse_social_facebook': {
+            'sub_tests': {}
+          }
+        }
+      },
+    }
+  }
+};
+
+tr.b.unittest.testSuite(function() {
+
+  var testOptions = {
+    setUp: function() {
+    },
+
+    tearDown: function() {
+    }
+  };
+
+  test('instantiate', function() {
+    var testPicker = document.createElement('memory-test-picker');
+    testPicker.subtestDict = MOCK_SUBTEST_DICT;
+    this.addHTMLOutput(testPicker);
+  }, testOptions);
+
+  test('filtering', function() {
+    var testPicker = document.createElement('memory-test-picker');
+    testPicker.subtestDict = MOCK_SUBTEST_DICT;
+    testPicker.query = 'backgroundimgur';
+    Polymer.dom.flush();
+    this.addHTMLOutput(testPicker);
+    assert.notEqual(-1, testPicker.innerHTML.indexOf('background_media_imgur'));
+    assert.equal(-1, testPicker.innerHTML.indexOf('browse_social_facebook'));
+  }, testOptions);});
+</script>

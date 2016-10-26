@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<!--
+Copyright 2016 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/components/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="/components/paper-button/paper-button.html">
+<link rel="import" href="/components/paper-input/paper-input.html">
+<link rel="import" href="/components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="/components/paper-progress/paper-progress.html">
+
+<link rel="import" href="/dashboard/elements/autocomplete-box.html">
+<link rel="import" href="/dashboard/static/simple_xhr.html">
+<link rel="import" href="/dashboard/static/testselection.html">
+
+<dom-module id="memory-test-picker">
+  <template>
+    <style include="iron-flex iron-flex-alignment">
+      #container {
+        margin: 20px 20px;
+      }
+
+      paper-input {
+        max-width: 33%;
+      }
+
+      paper-button:not([disabled]) {
+        color: #4285f4;
+      }
+
+      paper-button[raised]:not([disabled]) {
+        background: #4285f4;
+        color: #fff;
+      }
+
+      .results .layout {
+        align-items: center;
+      }
+    </style>
+
+    <div id="container">
+      <div>
+        <paper-input
+            label="Filter"
+            value="{{query}}">
+        </paper-input>
+      </div>
+      <div class="results">
+        <template is="dom-repeat" items="{{matchingGraphSpecs}}">
+          <div class="layout horizontal">
+            {{item.humanName}}
+            <paper-button on-click="handleAdd_">Add</paper-button>
+          </div>
+        </template>
+        <template is="dom-if" if="[[!length_(matchingGraphSpecs)]]">
+            No results.
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    'use strict';
+
+    var FuzzySelect = function(items, opt_accessor) {
+      this.accessor = opt_accessor || ((s) => s); 
+      this.items = items;
+    }
+
+    FuzzySelect.prototype.filter = function(query) {
+      var r = new RegExp('.*'+query.split('').join('.*')+'.*');
+      return this.items.filter((item) => r.exec(this.accessor(item)));
+    }
+
+    var MemoryGraphSpec = function(config) {
+      function check(name) {
+        if (config[name] === undefined) {
+          throw new Error('In MemoryGraphSpec "' + name + '" undefined.');
+        }
+        return config[name];
+      }
+      this.suite = 'system_health.memory_mobile';
+      this.bot = check('bot');
+      this.browser = check('browser');
+      this.processes = check('processes');
+      this.reporter = check('reporter');
+      this.subsystemPath = check('subsystemPath');
+      this.storyGroup = check('storyGroup');
+      this.story = check('story');
+    };
+
+    MemoryGraphSpec.fromFlattenedSubtestDictEntry = function(bot, entry) {
+      var [browser, processes, reporter, subsystem] = entry[0].split(':', 4);
+      var subsystemPath = subsystem.split(':');
+      var storyGroup = entry[1];
+      var story = entry[2];
+      return new MemoryGraphSpec({
+        bot: bot,
+        browser: browser,
+        processes: processes,
+        reporter: reporter,
+        subsystemPath: subsystemPath,
+        storyGroup: storyGroup,
+        story: story,
+      });
+    };
+
+    MemoryGraphSpec.prototype = {
+      get path() {
+        return 'ChromiumPerf/' + this.bot + '/' + this.suite + '/' +
+            'memory:chrome:' + this.processes + ':' +
+            this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
+            this.story;
+      },
+
+      get humanName() {
+        return this.suite + '/' + 'memory:chrome:' + this.processes + ':' +
+            this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
+            this.story;
+      }
+    };
+
+    Polymer({
+
+      is: 'memory-test-picker',
+      properties: {
+        query: {
+          type: String,
+          notify: true,
+          value: () => ''
+        },
+
+        graphSpecs: {
+          type: Array,
+          value: () => []
+        },
+
+        matchingGraphSpecs: {
+          type: Array,
+          computed: 'matchingGraphSpecs_(query, graphSpecs)',
+        }
+      },
+
+      set subtestDict(dict) {
+        var flattenedDict = [...this.flattenSubtestDict_(dict)];
+        var bot = 'android-nexus5';
+        this.graphSpecs = flattenedDict.map(function(entry) {
+          return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
+        });
+      },
+
+      matchingGraphSpecs_: function(query, graphSpecs) {
+        if (query === '') {
+          return [];
+        }
+        var selector = new FuzzySelect(graphSpecs, (spec) => spec.humanName);
+        return selector.filter(query);
+      },
+
+      length_: function(arr) {
+        return arr.length;
+      },
+
+      handleAdd_(model) {
+        this.fire('add', {
+          path: model.path,
+          series: [model.story]
+        });
+      },
+
+      flattenSubtestDict_: function* (subtestDict) {
+        for (var key in subtestDict) {
+          var test = subtestDict[key];
+          var subtests = test['sub_tests'];
+          if (subtests && Object.keys(subtests).length > 0) {
+            for (var a of this.flattenSubtestDict_(subtests)) {
+              yield [key].concat(a);
+            } 
+          } else {
+            yield [key];
+          }
+        }
+      }
+    });
+  </script>
+</dom-module>
