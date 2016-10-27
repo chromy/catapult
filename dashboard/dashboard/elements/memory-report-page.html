@@ -13,26 +13,56 @@ found in the LICENSE file.
 
 <dom-module id="memory-report-page">
   <template>
-    <style>
-      #nav-container {
-        display: flex;
-        margin: 5px;
+    <style include="iron-flex iron-flex-alignment">
+      .section {
+        padding: 8px;
+        margin: 4px;
+        position: relative;
+      }
+      .section::before {
+        height: 100%;
+        width: 4px;
+        margin-left: -4px;
+        position: absolute;
+        content: ' ';
+        border-left: black solid 1px;
+        border-top: black solid 1px;
+        border-bottom: black solid 1px;
       }
     </style>
+
 
     <login-warning id="login-warning" login-link="{{loginUrl}}"
                    hidden$="{{isInternalUser}}">
     </login-warning>
-
-    <div id="nav-container">
-      <test-picker id="test-picker" xsrf-token="{{xsrfToken}}"
-                   test-suites="{{testSuites}}"></test-picker>
+    <div class="section">
+      <h3>Select suite and device</h3>
+      <div class="layout horizontal flex-auto">
+        <autocomplete-box
+          class="flex-auto"
+          datalist={{suites}}
+          placeholder="Suite"
+          on-dropdownselect="onSuiteSelect"
+          id="selection-suite"></autocomplete-box>
+        <autocomplete-box
+          class="flex-auto"
+          datalist={{devices}}
+          placeholder="Device"
+          on-dropdownselect="onDeviceSelect"
+          id="selection-device"></autocomplete-box>
+      </div>
     </div>
-    <div>
+
+    <div class="section">
+      <h3>Select graphs</h3>
       <memory-test-picker id="memory-test-picker" xsrf-token="{{xsrfToken}}"
                    test-suites="{{testSuites}}"></memory-test-picker>
     </div>
-    <section id="charts-container"></section>
+
+    <div class="section">
+      <h3>Graphs</h3>
+      <section id="charts-container"></section>
+    </div>
 
     <div id="toasts" hidden>
       <div id="warningtoast">
@@ -57,7 +87,6 @@ found in the LICENSE file.
           value: () => [],
           notify: true
         },
-        hasChart: { notify: true },
         onRevisionRange: { observer: 'onRevisionRangeChanged' },
         graphParams: {
           type: Object,
@@ -90,6 +119,20 @@ found in the LICENSE file.
         testSuites: {
           type: Object,
           value: () => ({})
+        },
+        suites: {
+          type: Array,
+          value: () => ([
+            'system_health.memory_mobile',
+          ].map(suite => ({ name: suite })))
+        },
+        devices: {
+          type: Array,
+          value: () => ([
+            'android-nexus5',
+            'android-nexus5X',
+            'android-nexus6',
+          ].map(device => ({ name: device })))
         }
       },
 
@@ -109,6 +152,7 @@ found in the LICENSE file.
             }
             this.xsrfToken = response['xsrf_token'];
             this.testSuites = response['test_suites'];
+            console.log(this.testSuites);
             for (var i = 0; i < this.charts.length; i++) {
               this.setChartData(this.charts[i]);
             }
@@ -120,9 +164,10 @@ found in the LICENSE file.
         window.addEventListener('pagestaterequest',
                                 this.onPageStateRequest.bind(this));
 
-        this.testPicker = this.$['test-picker'];
-        this.testPicker.addEventListener(
-            'add', this.onAddChartButtonClicked.bind(this));
+        this.selectSuite = this.$['selection-suite'];
+        this.selectSuite.setDataList(this.selectSuite.datalist);
+        this.selectDevice = this.$['selection-device'];
+        this.selectDevice.setDataList(this.selectDevice.datalist);
 
         this.memoryTestPicker = this.$['memory-test-picker'];
         this.memoryTestPicker.addEventListener(
@@ -198,7 +243,6 @@ found in the LICENSE file.
             'revisionrange', this.onRevisionRangeChanged.bind(this));
         this.setChartData(chart);
         chart.addSeriesGroup(testPathAndSelected, true);
-        this.testPicker.hasChart = true;
       },
 
       /**
@@ -230,7 +274,6 @@ found in the LICENSE file.
         if (this.charts.length == 0) {
           event.detail['params'] = null;
           this.graphParams = {};
-          this.testPicker.hasChart = false;
         }
 
         this.uriController.onPageStateChanged(event);
@@ -253,23 +296,11 @@ found in the LICENSE file.
       /**
        * On 'Add' button clicked, add a chart for the current selection.
        */
-      onAddChartButtonClicked: function(event) {
-        var selection = this.testPicker.getCurrentSelection();
-        if (selection && selection.isValid()) {
-          this.addChart(selection.getTestPathAndSelectedSeries(), true);
-        }
-        this.fireNumChartChangedEvent();
-      },
-
-      /**
-       * On 'Add' button clicked, add a chart for the current selection.
-       */
        onAddChart: function(event) {
         var testPathAndSeries = event.details.testPathAndSeries;
         this.addChart(testPathAndSeries, true);
         this.fireNumChartChangedEvent();
       },
-
 
       /**
        * Gets report page state.
@@ -305,6 +336,14 @@ found in the LICENSE file.
               'error': true
           });
         }
+      },
+
+      onDeviceSelect: function(event) {
+        console.log(event);
+      },
+
+      onSuiteSelect: function(event) {
+        console.log(event);
       }
     });
   </script>

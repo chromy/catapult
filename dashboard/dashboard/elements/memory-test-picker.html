@@ -143,6 +143,10 @@ found in the LICENSE file.
         }
       },
 
+      created: function() {
+        console.log(this.testSuites);
+      },
+
       set subtestDict(dict) {
         var flattenedDict = [...this.flattenSubtestDict_(dict)];
         var bot = 'android-nexus5';
