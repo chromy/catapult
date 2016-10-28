@@ -44,18 +44,16 @@ found in the LICENSE file.
       <div>
         <paper-input
             label="Filter"
+            disabled$="{{!length_(graphSpecs)}}"
             value="{{query}}">
         </paper-input>
       </div>
       <div class="results">
         <template is="dom-repeat" items="{{matchingGraphSpecs}}">
           <div class="layout horizontal">
-            {{item.humanName}}
             <paper-button on-click="handleAdd_">Add</paper-button>
+            {{item.humanName}}
           </div>
-        </template>
-        <template is="dom-if" if="[[!length_(matchingGraphSpecs)]]">
-            No results.
         </template>
       </div>
     </div>
