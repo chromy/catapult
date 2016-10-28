@@ -8,6 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/dashboard/elements/login-warning.html">
 <link rel="import" href="/dashboard/elements/test-picker.html">
 <link rel="import" href="/dashboard/elements/memory-test-picker.html">
+<link rel="import" href="/components/paper-spinner/paper-spinner.html">
 <link rel="import" href="/dashboard/static/simple_xhr.html">
 <link rel="import" href="/dashboard/static/uri.html">
 
@@ -16,18 +17,31 @@ found in the LICENSE file.
     <style include="iron-flex iron-flex-alignment">
       .section {
         padding: 8px;
-        margin: 4px;
+        margin: 20px auto;
+        margin-left: 40;
         position: relative;
+        max-width: 1000px;
       }
       .section::before {
         height: 100%;
         width: 4px;
-        margin-left: -4px;
+        margin-left: -40px;
         position: absolute;
+        writing-mode: vertical-lr;
+        text-align: center;
         content: ' ';
         border-left: black solid 1px;
         border-top: black solid 1px;
         border-bottom: black solid 1px;
+      }
+      .section.tests::before {
+        content: 'Tests';
+      }
+      .section.select::before {
+        content: 'Select';
+      }
+      .section.graphs::before {
+        content: 'Graphs';
       }
     </style>
 
@@ -35,9 +49,8 @@ found in the LICENSE file.
     <login-warning id="login-warning" login-link="{{loginUrl}}"
                    hidden$="{{isInternalUser}}">
     </login-warning>
-    <div class="section">
-      <h3>Select suite and device</h3>
-      <div class="layout horizontal flex-auto">
+    <div class="section tests">
+      <div class="layout horizontal flex-auto center">
         <autocomplete-box
           class="flex-auto"
           datalist={{suites}}
@@ -50,17 +63,16 @@ found in the LICENSE file.
           placeholder="Device"
           on-dropdownselect="onDeviceSelect"
           id="selection-device"></autocomplete-box>
+        <paper-spinner id="subtest-spinner" active$="[[subtestsLoading]]"></paper-spinner>
       </div>
     </div>
 
-    <div class="section">
-      <h3>Select graphs</h3>
+    <div class="section select">
       <memory-test-picker id="memory-test-picker" xsrf-token="{{xsrfToken}}"
                    test-suites="{{testSuites}}"></memory-test-picker>
     </div>
 
-    <div class="section">
-      <h3>Graphs</h3>
+    <div class="section graphs">
       <section id="charts-container"></section>
     </div>
 
@@ -132,8 +144,17 @@ found in the LICENSE file.
             'android-nexus5',
             'android-nexus5X',
             'android-nexus6',
-          ].map(device => ({ name: device })))
+          ].map(device => ({ name: device }))),
+
+          subtestsLoading: {
+            type: Boolean,
+            value: false
+          },
         }
+      },
+
+      set subtestDict(subtestDict) {
+        this.memoryTestPicker.subtestDict = subtestDict;
       },
 
       ready: function() {
@@ -168,6 +189,7 @@ found in the LICENSE file.
         this.selectSuite.setDataList(this.selectSuite.datalist);
         this.selectDevice = this.$['selection-device'];
         this.selectDevice.setDataList(this.selectDevice.datalist);
+        this.subtestSpinner = this.$['subtest-spinner'];
 
         this.memoryTestPicker = this.$['memory-test-picker'];
         this.memoryTestPicker.addEventListener(
@@ -339,12 +361,55 @@ found in the LICENSE file.
       },
 
       onDeviceSelect: function(event) {
-        console.log(event);
+        if (this.device !== this.selectDevice.value) {
+          this.device = this.selectDevice.value;
+          this.sendSubtestRequest();
+        }
       },
 
       onSuiteSelect: function(event) {
-        console.log(event);
-      }
+        if (this.suite !== this.selectSuite.value) {
+          this.suite = this.selectSuite.value;
+          this.sendSubtestRequest();
+        }
+      },
+
+      sendSubtestRequest: function() {
+        if (this.subtestXhr) {
+          this.subtestXhr.abort();
+          this.subtestXhr = null;
+        }
+        var device = this.device;
+        if (!device) {
+          return;
+        }
+        var suite = this.suite;
+        if (!suite) {
+          return;
+        }
+
+        this.subtestsLoading = true;
+
+        var params = {
+          type: 'sub_tests',
+          suite: suite,
+          bot: device,
+          xsrf_token: this.xsrfToken
+        };
+        this.subtestXhr = simple_xhr.send(
+            '/list_tests',
+            params,
+            function(response) {
+              this.subtestsLoading = false;
+              this.subtestDict = response;
+            }.bind(this),
+            function(error) {
+              if (error) {
+                console.log('Error from sendSubtestRequest.');
+              }
+              this.subtestsLoading = false;
+            }.bind(this));
+        },
     });
   </script>
 </dom-module>

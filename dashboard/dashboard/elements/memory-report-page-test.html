@@ -68,68 +68,6 @@ var SHORT_URI_JSON = {
   ]]
 };
 
-var SUNSPIDER_MENU_JSON = {
-  'Total': {
-    'has_rows': true,
-    'sub_tests': {
-      'http___www.webkit.org_perf_sunspider-1.0.2_sunspider-1.0.2_driver.html':
-      {
-        'has_rows': true,
-        'sub_tests': {}
-      },
-      'http___www.webkit.org_perf_sunspider-1.0.2_sunspider-1.0.2.html_ref': {
-        'has_rows': true,
-        'sub_tests': {}
-      },
-      'ref': {
-        'has_rows': true,
-        'sub_tests': {}
-      }
-    }
-  }
-};
-
-var DROMAEO_MENU_JSON = {
-  'dom': {
-    'has_rows': true,
-    'sub_tests': {
-      'http___dromaeo.com?dom-attr_ref': {
-        'has_rows': true,
-        'sub_tests': {}
-      },
-      'http___dromaeo.com?dom-attr': {
-        'has_rows': true,
-        'sub_tests': {}
-      },
-      'ref': {
-        'has_rows': true,
-        'sub_tests': {}
-      }
-    }
-  }
-};
-
-var MOCK_SUBTEST_DICT = {
-  'memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg': {
-    'sub_tests': {
-      'background_media': {
-        'sub_tests': {
-          'background_media_imgur': {
-            'sub_tests': {}
-          }
-        }
-      },
-      'browse_social': {
-        'sub_tests': {
-          'browse_social_facebook': {
-            'sub_tests': {}
-          }
-        }
-      },
-    }
-  }
-};
-
 var MOCK_SUBTEST_DICT = {
   'memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg': {
     'sub_tests': {
@@ -154,15 +92,29 @@ var MOCK_SUBTEST_DICT = {
 tr.b.unittest.testSuite(function() {
 
   var originalGetQueryString;
+  
+  function mockXHR() {
+    testing_common.addXhrMock(
+        '/list_tests?bot=android-nexus5X&suite=system_health.memory_mobile&' +
+        'type=sub_tests&xsrf_token=aaaaa',
+        JSON.stringify(MOCK_SUBTEST_DICT));
+    testing_common.addXhrMock(
+        '/list_tests?bot=android-nexus5&suite=system_health.memory_mobile&' +
+        'type=sub_tests&xsrf_token=aaaaa',
+        JSON.stringify(MOCK_SUBTEST_DICT));
+    testing_common.addXhrMock(
+        '/list_tests?bot=android-nexus6&suite=system_health.memory_mobile&' +
+        'type=sub_tests&xsrf_token=aaaaa',
+        JSON.stringify(MOCK_SUBTEST_DICT));
+  }
 
   var testOptions = {
     setUp: function() {
       originalGetQueryString = uri.getQueryString;
+      mockXHR();
     },
     tearDown: function() {
       uri.getQueryString = originalGetQueryString;
-      // Comment this out to interact with the page! Otherwise the mock gets
-      // torn down before you can interact with the UI.
       testing_common.clearXhrMock();
     }
   };
@@ -178,25 +130,17 @@ tr.b.unittest.testSuite(function() {
     testing_common.addXhrMock(
         '/short_uri?sid=12345', JSON.stringify(SHORT_URI_JSON));
 
-    // Fill in teh submenus for dromaeo.
-    testing_common.addXhrMock(
-        '/list_tests?bots=ChromiumPerf%2Fchromium-rel-mac11&suite=dromaeo.' +
-        'domcoreattr&type=sub_tests&xsrf_token=aaaaa',
-        JSON.stringify(DROMAEO_MENU_JSON));
-
-    // Fill in the submenus for sunspider
-    testing_common.addXhrMock(
-        '/list_tests?bots=ChromiumPerf%2Fandroid-nexus6&suite=sunspider&' +
-        'type=sub_tests&xsrf_token=aaaaa',
-        JSON.stringify(SUNSPIDER_MENU_JSON));
-
     // Make the charts load when requested.
     testing_common.mockChartJson(dromaeoCharts, null, '12345');
     testing_common.mockChartJson(sunspiderCharts, null, '12345');
 
+    var button = document.createElement('button');
+    button.textContent = 'Mock XHR';
+    button.addEventListener('click', () => mockXHR());
+    this.addHTMLOutput(button);
+
     // The memory-report-page uses all these elements.
     var page = document.createElement('memory-report-page');
-    page.memoryTestPicker.subtestDict = MOCK_SUBTEST_DICT;
     this.addHTMLOutput(page);
   }, testOptions);
 
