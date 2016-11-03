@@ -19,7 +19,6 @@ found in the LICENSE file.
   <template>
     <style include="iron-flex iron-flex-alignment">
       #container {
-        margin: 20px 20px;
       }
 
       paper-input {
@@ -90,7 +89,7 @@ found in the LICENSE file.
     };
 
     MemoryGraphSpec.fromFlattenedSubtestDictEntry = function(bot, entry) {
-      var [browser, processes, reporter, subsystem] = entry[0].split(':', 4);
+      var [_, browser, processes, reporter, subsystem] = entry[0].split(':', 5);
       var subsystemPath = subsystem.split(':');
       var storyGroup = entry[1];
       var story = entry[2];
@@ -108,15 +107,15 @@ found in the LICENSE file.
     MemoryGraphSpec.prototype = {
       get path() {
         return 'ChromiumPerf/' + this.bot + '/' + this.suite + '/' +
-            'memory:chrome:' + this.processes + ':' +
+            'memory:' + this.browser + ':' + this.processes + ':' +
             this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
             this.story;
       },
 
       get humanName() {
-        return this.suite + '/' + 'memory:chrome:' + this.processes + ':' +
-            this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
-            this.story;
+        return this.browser + ':' + this.processes + ':' +
+            this.subsystemPath.join(':') + '/' + this.storyGroup +
+            '/' + this.story;
       }
     };
 
@@ -142,7 +141,6 @@ found in the LICENSE file.
       },
 
       created: function() {
-        console.log(this.testSuites);
       },
 
       set subtestDict(dict) {
@@ -165,10 +163,11 @@ found in the LICENSE file.
         return arr.length;
       },
 
-      handleAdd_(model) {
+      handleAdd_(e) {
+        var item = e.model.item;
         this.fire('add', {
-          path: model.path,
-          series: [model.story]
+          path: item.path,
+          series: [item.story]
         });
       },
 
