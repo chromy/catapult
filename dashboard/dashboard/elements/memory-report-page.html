@@ -20,7 +20,7 @@ found in the LICENSE file.
         margin: 20px auto;
         margin-left: 40;
         position: relative;
-        max-width: 1000px;
+        max-width: 90%;
       }
       .section::before {
         height: 100%;
@@ -68,8 +68,7 @@ found in the LICENSE file.
     </div>
 
     <div class="section select">
-      <memory-test-picker id="memory-test-picker" xsrf-token="{{xsrfToken}}"
-                   test-suites="{{testSuites}}"></memory-test-picker>
+      <memory-test-picker id="memory-test-picker" xsrf-token="{{xsrfToken}}"></memory-test-picker>
     </div>
 
     <div class="section graphs">
@@ -132,6 +131,7 @@ found in the LICENSE file.
           type: Object,
           value: () => ({})
         },
+
         suites: {
           type: Array,
           value: () => ([
@@ -173,7 +173,6 @@ found in the LICENSE file.
             }
             this.xsrfToken = response['xsrf_token'];
             this.testSuites = response['test_suites'];
-            console.log(this.testSuites);
             for (var i = 0; i < this.charts.length; i++) {
               this.setChartData(this.charts[i]);
             }
@@ -318,9 +317,10 @@ found in the LICENSE file.
       /**
        * On 'Add' button clicked, add a chart for the current selection.
        */
-       onAddChart: function(event) {
-        var testPathAndSeries = event.details.testPathAndSeries;
-        this.addChart(testPathAndSeries, true);
+      onAddChart: function(event) {
+        var path = event.detail.path;
+        var series = event.detail.series;
+        this.addChart([path, series], true);
         this.fireNumChartChangedEvent();
       },
 

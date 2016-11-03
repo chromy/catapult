@@ -12,8 +12,7 @@ found in the LICENSE file.
 <script src="/flot/jquery.flot.selection.min.js"></script>
 
 <link rel="import" href="/dashboard/elements/memory-report-page.html">
-<link rel="import" href="/dashboard/static/testdata/dromaeo-charts.html">
-<link rel="import" href="/dashboard/static/testdata/sunspider-charts.html">
+<link rel="import" href="/dashboard/static/testdata/memory-charts.html">
 <link rel="import" href="/dashboard/static/testing_common.html">
 
 <link rel="import" href="/tracing/core/test_utils.html">
@@ -40,31 +39,26 @@ var REPORT_JSON = {
   'is_internal_user': false,
   'warning_bug': null,
   'test_suites': {
-    'sunspider': {
+    'system_health.memory_mobile': {
+      'des': 'Mobile Chrome Memory System Health Benchmark.',
       'mas': {
         'ChromiumPerf': {
+          'android-nexus5': false,
+          'android-nexus5X': false,
           'android-nexus6': false,
         }
       },
-      'des': 'JavaScript performance test.',
       'mon': [
-        'Total'
+        'memory:chrome:all_processes:reported_by_chrome:blink_gc:effective_size_avg/browse_media/browse_media_facebook'
       ]
     },
-    'dromaeo.domcoreattr': {
-      'mas': {
-        'ChromiumPerf': {
-          'chromium-rel-mac11': false
-        }
-      }
-    }
   },
   'xsrf_token': 'aaaaa'
 };
 
 var SHORT_URI_JSON = {
   'charts': [[
-    ['ChromiumPerf/chromium-rel-mac11/dromaeo.domcoreattr/dom', ['dom']]
+    ['ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/background_media/background_media_imgur', ['background_media_imgur']]
   ]]
 };
 
@@ -131,8 +125,7 @@ tr.b.unittest.testSuite(function() {
         '/short_uri?sid=12345', JSON.stringify(SHORT_URI_JSON));
 
     // Make the charts load when requested.
-    testing_common.mockChartJson(dromaeoCharts, null, '12345');
-    testing_common.mockChartJson(sunspiderCharts, null, '12345');
+    testing_common.mockChartJson(memoryCharts, null, '12345');
 
     var button = document.createElement('button');
     button.textContent = 'Mock XHR';
