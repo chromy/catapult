@@ -125,8 +125,11 @@ tr.b.unittest.testSuite(function() {
         '/short_uri?sid=12345', JSON.stringify(SHORT_URI_JSON));
 
     // Make the charts load when requested.
-    testing_common.mockChartJson(memoryCharts, null, '12345');
-
+    var a = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/background_media', 'background_media_imgur');
+    var b = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/browse_social', 'browse_social_facebook');
+    testing_common.mockChartJson(a, null, '12345');
+    testing_common.mockChartJson(b, null, '12345');
+ 
     var button = document.createElement('button');
     button.textContent = 'Mock XHR';
     button.addEventListener('click', () => mockXHR());

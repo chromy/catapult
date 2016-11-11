@@ -6,6 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/components/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="/components/iron-icons/iron-icons.html">
 <link rel="import" href="/components/paper-button/paper-button.html">
 <link rel="import" href="/components/paper-input/paper-input.html">
 <link rel="import" href="/components/paper-icon-button/paper-icon-button.html">
@@ -18,20 +19,22 @@ found in the LICENSE file.
 <dom-module id="memory-test-picker">
   <template>
     <style include="iron-flex iron-flex-alignment">
-      #container {
-      }
-
       paper-input {
         max-width: 33%;
       }
 
-      paper-button:not([disabled]) {
+      .graph-spec paper-button {
+        margin-left: 0px;
+        margin-right: 0px;
         color: #4285f4;
       }
 
-      paper-button[raised]:not([disabled]) {
-        background: #4285f4;
-        color: #fff;
+      .graph-spec paper-icon-button {
+        color: #212121;
+      }
+
+      .graph-spec p {
+        margin: 8px;
       }
 
       .results .layout {
@@ -49,9 +52,15 @@ found in the LICENSE file.
       </div>
       <div class="results">
         <template is="dom-repeat" items="{{matchingGraphSpecs}}">
-          <div class="layout horizontal">
-            <paper-button on-click="handleAdd_">Add</paper-button>
-            {{item.humanName}}
+          <div class="graph-spec layout horizontal">
+            <paper-icon-button id="dnd-btn"
+                draggable="true"
+                icon="open-with"
+                on-dragstart="handleGraphSpecDragStart_">
+                Drag me
+            </paper-icon-button>
+            <paper-button on-click="handleGraphSpecAdd_">Add</paper-button>
+            <p>{{item.humanName}}</p>
           </div>
         </template>
       </div>
@@ -85,22 +94,24 @@ found in the LICENSE file.
       this.reporter = check('reporter');
       this.subsystemPath = check('subsystemPath');
       this.storyGroup = check('storyGroup');
-      this.story = check('story');
+      this.storyName = check('storyName');
     };
 
     MemoryGraphSpec.fromFlattenedSubtestDictEntry = function(bot, entry) {
       var [_, browser, processes, reporter, subsystem] = entry[0].split(':', 5);
       var subsystemPath = subsystem.split(':');
       var storyGroup = entry[1];
-      var story = entry[2];
+      var storyName = entry[2];
+      var storyPath = entry[2].split('_');
       return new MemoryGraphSpec({
         bot: bot,
         browser: browser,
         processes: processes,
         reporter: reporter,
         subsystemPath: subsystemPath,
+        storyPath: storyPath,
         storyGroup: storyGroup,
-        story: story,
+        storyName: storyName,
       });
     };
 
@@ -109,18 +120,21 @@ found in the LICENSE file.
         return 'ChromiumPerf/' + this.bot + '/' + this.suite + '/' +
             'memory:' + this.browser + ':' + this.processes + ':' +
             this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
-            this.story;
+            this.storyName;
+      },
+
+      get testPathAndSeries() {
+        return [this.path, [this.storyName]];
       },
 
       get humanName() {
         return this.browser + ':' + this.processes + ':' +
             this.subsystemPath.join(':') + '/' + this.storyGroup +
-            '/' + this.story;
+            '/' + this.storyName;
       }
     };
 
     Polymer({
-
       is: 'memory-test-picker',
       properties: {
         query: {
@@ -163,12 +177,26 @@ found in the LICENSE file.
         return arr.length;
       },
 
-      handleAdd_(e) {
+      /**
+       * Handler for adding a new graph.
+       */
+      handleGraphSpecAdd_(e) {
         var item = e.model.item;
         this.fire('add', {
           path: item.path,
-          series: [item.story]
+          series: [item.storyName]
         });
+      },
+
+      /**
+       * Handler for dragging a graph spec onto an existing graph.
+       */
+      handleGraphSpecDragStart_: function(event, detail) {
+        var item = event.model.item;
+        var testPathAndSeries = item.testPathAndSeries;
+        event.dataTransfer.setData('type', 'seriesdnd');
+        event.dataTransfer.setData('data', JSON.stringify(testPathAndSeries));
+        event.dataTransfer.effectAllowed = 'copy';
       },
 
       flattenSubtestDict_: function* (subtestDict) {
@@ -178,7 +206,7 @@ found in the LICENSE file.
           if (subtests && Object.keys(subtests).length > 0) {
             for (var a of this.flattenSubtestDict_(subtests)) {
               yield [key].concat(a);
-            } 
+            }
           } else {
             yield [key];
           }
