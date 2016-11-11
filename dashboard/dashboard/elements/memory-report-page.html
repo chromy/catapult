@@ -6,7 +6,6 @@ found in the LICENSE file.
 -->
 <link rel="import" href="/dashboard/elements/chart-container.html">
 <link rel="import" href="/dashboard/elements/login-warning.html">
-<link rel="import" href="/dashboard/elements/test-picker.html">
 <link rel="import" href="/dashboard/elements/memory-test-picker.html">
 <link rel="import" href="/components/paper-spinner/paper-spinner.html">
 <link rel="import" href="/dashboard/static/simple_xhr.html">
@@ -18,30 +17,8 @@ found in the LICENSE file.
       .section {
         padding: 8px;
         margin: 20px auto;
-        margin-left: 40;
         position: relative;
         max-width: 90%;
-      }
-      .section::before {
-        height: 100%;
-        width: 4px;
-        margin-left: -40px;
-        position: absolute;
-        writing-mode: vertical-lr;
-        text-align: center;
-        content: ' ';
-        border-left: black solid 1px;
-        border-top: black solid 1px;
-        border-bottom: black solid 1px;
-      }
-      .section.tests::before {
-        content: 'Tests';
-      }
-      .section.select::before {
-        content: 'Select';
-      }
-      .section.graphs::before {
-        content: 'Graphs';
       }
     </style>
 
@@ -315,12 +292,12 @@ found in the LICENSE file.
       },
 
       /**
-       * On 'Add' button clicked, add a chart for the current selection.
+       * Another component wants us to add a chart.
        */
       onAddChart: function(event) {
         var path = event.detail.path;
         var series = event.detail.series;
-        this.addChart([path, series], true);
+        this.addChart([[path, series]], true);
         this.fireNumChartChangedEvent();
       },
 
