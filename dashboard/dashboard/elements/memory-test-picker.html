@@ -91,14 +91,20 @@ found in the LICENSE file.
       this.bot = check('bot');
       this.browser = check('browser');
       this.processes = check('processes');
-      this.reporter = check('reporter');
       this.subsystemPath = check('subsystemPath');
       this.storyGroup = check('storyGroup');
       this.storyName = check('storyName');
+      // Reporter is undefined for some metrics (like dump_count).
+      this.reporter = config['reporter'] || null;
     };
 
     MemoryGraphSpec.fromFlattenedSubtestDictEntry = function(bot, entry) {
-      var [_, browser, processes, reporter, subsystem] = entry[0].split(':', 5);
+      var browser, processes, reporter, subsystem, _;
+      if (entry[0].includes('reported_by')) {
+        [_, browser, processes, reporter, subsystem] = entry[0].split(':', 5);
+      } else {
+        [_, browser, processes, subsystem] = entry[0].split(':', 4);
+      }
       var subsystemPath = subsystem.split(':');
       var storyGroup = entry[1];
       var storyName = entry[2];
@@ -117,10 +123,14 @@ found in the LICENSE file.
 
     MemoryGraphSpec.prototype = {
       get path() {
+        var reporter = '';
+        if (this.reporter) {
+          reporter = this.reporter + ':';
+        }
         return 'ChromiumPerf/' + this.bot + '/' + this.suite + '/' +
             'memory:' + this.browser + ':' + this.processes + ':' +
-            this.subsystemPath.join(':') + '/' + this.storyGroup + '/' +
-            this.storyName;
+            reporter + this.subsystemPath.join(':') + '/' +
+            this.storyGroup + '/' + this.storyName;
       },
 
       get testPathAndSeries() {
@@ -128,7 +138,11 @@ found in the LICENSE file.
       },
 
       get humanName() {
-        return this.browser + ':' + this.processes + ':' +
+        var reporter = '';
+        if (this.reporter) {
+          reporter = this.reporter + ':';
+        }
+        return this.browser + ':' + this.processes + ':' + reporter + 
             this.subsystemPath.join(':') + '/' + this.storyGroup +
             '/' + this.storyName;
       }
@@ -170,7 +184,8 @@ found in the LICENSE file.
           return [];
         }
         var selector = new FuzzySelect(graphSpecs, (spec) => spec.humanName);
-        return selector.filter(query);
+        var matches = selector.filter(query);
+        return matches.slice(0, 30);
       },
 
       length_: function(arr) {

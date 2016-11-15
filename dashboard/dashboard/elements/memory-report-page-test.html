@@ -20,7 +20,7 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-var REPORT_JSON = {
+var SAVED_REPORT_JSON = {
   'login_url': 'https:do/not/click',
   'revision_info': {
     'r_commit_pos': {
@@ -62,45 +62,31 @@ var SHORT_URI_JSON = {
   ]]
 };
 
-var MOCK_SUBTEST_DICT = {
-  'memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg': {
-    'sub_tests': {
-      'background_media': {
-        'sub_tests': {
-          'background_media_imgur': {
-            'sub_tests': {}
-          }
-        }
-      },
-      'browse_social': {
-        'sub_tests': {
-          'browse_social_facebook': {
-            'sub_tests': {}
-          }
-        }
-      },
-    }
-  }
-};
-
 tr.b.unittest.testSuite(function() {
 
   var originalGetQueryString;
   
   function mockXHR() {
+    var subTestDict = memoryCharts.makeAllMemoryChartsSubTestDict();
     testing_common.addXhrMock(
         '/list_tests?bot=android-nexus5X&suite=system_health.memory_mobile&' +
         'type=sub_tests&xsrf_token=aaaaa',
-        JSON.stringify(MOCK_SUBTEST_DICT));
+        JSON.stringify(subTestDict));
     testing_common.addXhrMock(
         '/list_tests?bot=android-nexus5&suite=system_health.memory_mobile&' +
         'type=sub_tests&xsrf_token=aaaaa',
-        JSON.stringify(MOCK_SUBTEST_DICT));
+        JSON.stringify(subTestDict));
     testing_common.addXhrMock(
         '/list_tests?bot=android-nexus6&suite=system_health.memory_mobile&' +
         'type=sub_tests&xsrf_token=aaaaa',
-        JSON.stringify(MOCK_SUBTEST_DICT));
-  }
+        JSON.stringify(subTestDict));
+
+    // Make the charts load when requested.
+    var a = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/background_media', 'background_media_imgur');
+    var b = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/browse_social', 'browse_social_facebook');
+    testing_common.mockChartJson(a, null, '12345');
+    testing_common.mockChartJson(b, null, '12345');
+   }
 
   var testOptions = {
     setUp: function() {
@@ -118,18 +104,13 @@ tr.b.unittest.testSuite(function() {
     uri.getQueryString = function() { return '?sid=12345'; };
 
     // Mock out the basic data neede by the /report page.
-    testing_common.addXhrMock('/report?sid=12345', JSON.stringify(REPORT_JSON));
+    testing_common.addXhrMock(
+        '/report?sid=12345', JSON.stringify(SAVED_REPORT_JSON));
 
     // Mock out the request to /short_uri to get which charts to load from sid.
     testing_common.addXhrMock(
         '/short_uri?sid=12345', JSON.stringify(SHORT_URI_JSON));
 
-    // Make the charts load when requested.
-    var a = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/background_media', 'background_media_imgur');
-    var b = memoryCharts.makeMemoryChart('ChromiumPerf/android-nexus5/system_health.memory_mobile/memory:chrome:all_processes:reported_by_chrome:allocated_objects_size_avg/browse_social', 'browse_social_facebook');
-    testing_common.mockChartJson(a, null, '12345');
-    testing_common.mockChartJson(b, null, '12345');
- 
     var button = document.createElement('button');
     button.textContent = 'Mock XHR';
     button.addEventListener('click', () => mockXHR());
