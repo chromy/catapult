@@ -219,6 +219,7 @@ found in the LICENSE file.
        * @param {boolean} isPrepend True for prepend, false for append.
        */
       addChart: function(testPathAndSelected, isPrepend) {
+        console.log('addChart', testPathAndSelected, isPrepend);
         // TODO(sullivan): This should be done with a polymer template, not
         // JavaScript-built DOM!!
         var container = this.$['charts-container'];
