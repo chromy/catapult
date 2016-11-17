@@ -154,21 +154,31 @@ found in the LICENSE file.
         query: {
           type: String,
           notify: true,
-          value: () => ''
+          value: () => '',
         },
 
         graphSpecs: {
           type: Array,
-          value: () => []
+          value: () => [],
         },
 
         matchingGraphSpecs: {
           type: Array,
           computed: 'matchingGraphSpecs_(query, graphSpecs)',
-        }
+        },
+
+        selectedPathsAndSeries: {
+          type Array,
+          value: () => [],
+        },
       },
 
-      created: function() {
+      set subtestDict(dict) {
+        var flattenedDict = [...this.flattenSubtestDict_(dict)];
+        var bot = 'android-nexus5';
+        this.graphSpecs = flattenedDict.map(function(entry) {
+          return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
+        });
       },
 
       set subtestDict(dict) {
@@ -197,10 +207,8 @@ found in the LICENSE file.
        */
       handleGraphSpecAdd_(e) {
         var item = e.model.item;
-        this.fire('add', {
-          path: item.path,
-          series: [item.storyName]
-        });
+        var pathAndSeries = item.testPathAndSeries;
+        this.push('selectedPathsAndSeries', pathAndSeries);
       },
 
       /**
