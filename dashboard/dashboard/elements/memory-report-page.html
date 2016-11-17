@@ -45,7 +45,11 @@ found in the LICENSE file.
     </div>
 
     <div class="section select">
-      <memory-test-picker id="memory-test-picker" xsrf-token="{{xsrfToken}}"></memory-test-picker>
+      <memory-test-picker
+          id="memory-test-picker"
+          xsrf-token="{{xsrfToken}}"
+          selected-paths-and-series="{{graphs}}">
+      </memory-test-picker>
     </div>
 
     <div class="section graphs">
@@ -122,12 +126,17 @@ found in the LICENSE file.
             'android-nexus5X',
             'android-nexus6',
           ].map(device => ({ name: device }))),
+        },
 
-          subtestsLoading: {
-            type: Boolean,
-            value: false
-          },
-        }
+        subtestsLoading: {
+          type: Boolean,
+          value: false
+        },
+
+        graphs: {
+          type: Array,
+          value: () => [],
+        },
       },
 
       set subtestDict(subtestDict) {
