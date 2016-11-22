@@ -29,10 +29,9 @@ class Html2OutputFormatter(output_formatter.OutputFormatter):
       remote_path = ('html-results/results-%s' %
                      datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
       try:
-        cloud_storage.Insert(
-            cloud_storage.PUBLIC_BUCKET, remote_path, file_path)
+        cloud_storage.Insert(self._upload_bucket, remote_path, file_path)
         print 'View online at',
-        print 'http://storage.googleapis.com/chromium-telemetry/' + remote_path
+        print 'http://storage.googleapis.com/{}/{}'.format(bucket, remote_path)
       except cloud_storage.PermissionError as e:
         logging.error('Cannot upload profiling files to cloud storage due ' +
                       'to permission error: ' + e.message)

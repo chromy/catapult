@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+telemetry/telemetry/internal/results/html2_output_formatter.py# Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -40,11 +40,12 @@ def _ShortDatetimeInEs5CompatibleFormat(dt):
 # TODO(eakuefner): rewrite template to use Telemetry JSON directly
 class HtmlOutputFormatter(output_formatter.OutputFormatter):
   def __init__(self, output_stream, metadata, reset_results, upload_results,
-      browser_type, results_label=None):
+      browser_type, results_label=None, upload_bucket=None):
     super(HtmlOutputFormatter, self).__init__(output_stream)
     self._metadata = metadata
     self._reset_results = reset_results
     self._upload_results = upload_results
+    self._upload_bucket = upload_bucket
     self._build_time = self._GetBuildTime()
     self._combined_results = []
     if results_label:
@@ -185,11 +186,9 @@ class HtmlOutputFormatter(output_formatter.OutputFormatter):
       file_name = 'html-results/results-%s' % datetime.datetime.now().strftime(
           '%Y-%m-%d_%H-%M-%S')
       try:
-        cloud_storage.Insert(cloud_storage.PUBLIC_BUCKET, file_name, file_path)
-        print
-        print ('View online at '
-               'http://storage.googleapis.com/chromium-telemetry/%s'
-               % file_name)
+        cloud_storage.Insert(self._upload_bucket, remote_path, file_path)
+        print 'View online at',
+        print 'http://storage.googleapis.com/{}/{}'.format(bucket, remote_path)
       except cloud_storage.PermissionError as e:
         logging.error('Cannot upload profiling files to cloud storage due to '
                       ' permission error: %s' % e.message)

@@ -121,6 +121,12 @@ def CreateResults(benchmark_metadata, options,
   if not options.output_formats:
     options.output_formats = [_OUTPUT_FORMAT_CHOICES[0]]
 
+  upload_bucket = None
+  if options.upload_results:
+    upload_bucket = options.upload_bucket
+    if upload_bucket in cloud_storage.BUCKET_ALIASES:
+      upload_bucket = cloud_storage.BUCKET_ALIASES[upload_bucket]
+
   output_formatters = []
   for output_format in options.output_formats:
     if output_format == 'none' or output_format == "gtest":
@@ -135,7 +141,7 @@ def CreateResults(benchmark_metadata, options,
       output_formatters.append(html_output_formatter.HtmlOutputFormatter(
           output_stream, benchmark_metadata, options.reset_results,
           options.upload_results, options.browser_type,
-          options.results_label))
+          options.results_label, upload_bucket=upload_bucket))
     elif output_format == 'json':
       output_formatters.append(json_output_formatter.JsonOutputFormatter(
           output_stream, benchmark_metadata))
