@@ -140,7 +140,7 @@ found in the LICENSE file.
       },
 
       set subtestDict(subtestDict) {
-        this.memoryTestPicker.subtestDict = subtestDict;
+        this.memoryTestPicker.updateSubtestDict(this.device, subtestDict);
       },
 
       ready: function() {

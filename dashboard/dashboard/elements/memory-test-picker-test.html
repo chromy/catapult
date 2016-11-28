@@ -28,13 +28,13 @@ tr.b.unittest.testSuite(function() {
 
   test('instantiate', function() {
     var testPicker = document.createElement('memory-test-picker');
-    testPicker.subtestDict = subTestDict;
+    testPicker.updateSubtestDict('nexus5X', subTestDict);
     this.addHTMLOutput(testPicker);
   }, testOptions);
 
   test('filtering', function() {
     var testPicker = document.createElement('memory-test-picker');
-    testPicker.subtestDict = subTestDict;
+    testPicker.updateSubtestDict('nexus5X', subTestDict);
     testPicker.query = 'backgroundimgur';
     Polymer.dom.flush();
     this.addHTMLOutput(testPicker);
