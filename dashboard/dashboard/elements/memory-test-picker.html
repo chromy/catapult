@@ -36,37 +36,64 @@ found in the LICENSE file.
       .graph-spec p {
         margin: 8px;
       }
+      
+      .dimension {
+        float: left;
+      }
 
-      .results .layout {
+      .filter {
+        clear: both;
+      }
+
+      .filter .layout {
         align-items: center;
       }
     </style>
 
     <div id="container">
-      <div>
-        <paper-input
-            label="Filter"
-            disabled$="{{!length_(graphSpecs)}}"
-            value="{{query}}">
-        </paper-input>
-      </div>
-      <div class="results">
-        <template is="dom-repeat" items="{{matchingGraphSpecs}}">
-          <div class="graph-spec layout horizontal">
-            <paper-icon-button id="dnd-btn"
-                draggable="true"
-                icon="open-with"
-                on-dragstart="handleGraphSpecDragStart_">
-                Drag me
-            </paper-icon-button>
-            <paper-button on-click="handleGraphSpecAdd_">Add</paper-button>
-            <p>{{item.humanName}}</p>
-          </div>
-        </template>
-      </div>
+      <template is="dom-if" if="{{length_(graphSpecs)}}">
+        <div class="filter">
+          <paper-input
+              label="Filter"
+              value="{{query}}">
+          </paper-input>
+          <template is="dom-repeat" items="{{matchingValues}}" as="value">
+            <div>
+              <input
+                  type="checkbox"
+                  id="{{value.id}}"
+                  style="vertical-align: middle;"></input>
+              <label for$="{{value.id}}">
+                  {{value.dimension.label}}: {{value.label}}
+              </label>
+            </div>
+          </template>
+        </div>
+
+        <div class="dimensions">
+          <template is="dom-repeat" items="{{dimensions}}" as="dimension">
+            <div class="dimension">
+              {{dimension.label}}
+              <template is="dom-repeat" items="{{getValuesForDimension_(dimension.id)}}" as="value">
+                <div>
+                  <input
+                      type="checkbox"
+                      id="{{dimension.id}}-{{value.id}}"
+                      style="vertical-align: middle;"></input>
+                  <label for$="{{dimension.id}}-{{value.id}}">
+                    {{value.label}}
+                  </label>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template is="dom-if" if="{{!length_(graphSpecs)}}">
+          <p>Select a device test suite and device above</p>
+      </template>
     </div>
   </template>
-
   <script>
     'use strict';
 
@@ -78,7 +105,51 @@ found in the LICENSE file.
     FuzzySelect.prototype.filter = function(query) {
       var r = new RegExp('.*'+query.split('').join('.*')+'.*');
       return this.items.filter((item) => r.exec(this.accessor(item)));
-    }
+    };
+
+    var ArrayPool = function() {
+        this.tree = new Map();
+        this.empty = Object();
+    };
+
+    ArrayPool.prototype.deduplicate = function(array) {
+      var tree = this.tree;
+      for (var item of array) {
+        if (!tree.has(item)) {
+          tree.set(item, new Map());
+        }
+        tree = tree.get(item);
+      }
+      if (!tree.has(this.empty)) {
+        tree.set(this.empty, array);
+      }
+      return tree.get(this.empty);
+    };
+
+    var Dimension = function(label, id, opt_additive) {
+      function check(name, v) {
+        if (v === undefined) {
+          throw new Error('In Dimension "' + name + '" undefined.');
+        }
+        return v;
+      }
+      this.label = check('label', label);
+      this.id = check('id', id);
+      this.additive = opt_additive === undefined ? false : opt_additive;
+    };
+
+    var Value = function(path, dimension) {
+      function check(name, v) {
+        if (v === undefined) {
+          throw new Error('In Value "' + name + '" undefined.');
+        }
+        return v;
+      }
+      this.path = check('path', path);
+      this.dimension = check('dimension', dimension);
+      this.id = this.path.join('-');
+      this.label = this.path.join(' / ');
+    };
 
     var MemoryGraphSpec = function(config) {
       function check(name) {
@@ -91,21 +162,16 @@ found in the LICENSE file.
       this.bot = check('bot');
       this.browser = check('browser');
       this.processes = check('processes');
-      this.subsystemPath = check('subsystemPath');
+      this.metricPath = check('metricPath');
+      this.storyPath = check('storyPath');
+
       this.storyGroup = check('storyGroup');
       this.storyName = check('storyName');
-      // Reporter is undefined for some metrics (like dump_count).
-      this.reporter = config['reporter'] || null;
     };
 
     MemoryGraphSpec.fromFlattenedSubtestDictEntry = function(bot, entry) {
-      var browser, processes, reporter, subsystem, _;
-      if (entry[0].includes('reported_by')) {
-        [_, browser, processes, reporter, subsystem] = entry[0].split(':', 5);
-      } else {
-        [_, browser, processes, subsystem] = entry[0].split(':', 4);
-      }
-      var subsystemPath = subsystem.split(':');
+      var [_, browser, processes] = entry[0].split(':', 3);
+      var metricPath = entry[0].split(':').slice(3);
       var storyGroup = entry[1];
       var storyName = entry[2];
       var storyPath = entry[2].split('_');
@@ -113,8 +179,7 @@ found in the LICENSE file.
         bot: bot,
         browser: browser,
         processes: processes,
-        reporter: reporter,
-        subsystemPath: subsystemPath,
+        metricPath: metricPath,
         storyPath: storyPath,
         storyGroup: storyGroup,
         storyName: storyName,
@@ -123,14 +188,10 @@ found in the LICENSE file.
 
     MemoryGraphSpec.prototype = {
       get path() {
-        var reporter = '';
-        if (this.reporter) {
-          reporter = this.reporter + ':';
-        }
         return 'ChromiumPerf/' + this.bot + '/' + this.suite + '/' +
             'memory:' + this.browser + ':' + this.processes + ':' +
-            reporter + this.subsystemPath.join(':') + '/' +
-            this.storyGroup + '/' + this.storyName;
+            this.metricPath.join(':') + '/' + this.storyGroup + '/' +
+            this.storyName;
       },
 
       get testPathAndSeries() {
@@ -138,12 +199,8 @@ found in the LICENSE file.
       },
 
       get humanName() {
-        var reporter = '';
-        if (this.reporter) {
-          reporter = this.reporter + ':';
-        }
-        return this.browser + ':' + this.processes + ':' + reporter + 
-            this.subsystemPath.join(':') + '/' + this.storyGroup +
+        return this.browser + ':' + this.processes + ':' + 
+            this.metricPath.join(':') + '/' + this.storyGroup +
             '/' + this.storyName;
       }
     };
@@ -162,42 +219,66 @@ found in the LICENSE file.
           value: () => [],
         },
 
-        matchingGraphSpecs: {
+        dimensions: {
           type: Array,
-          computed: 'matchingGraphSpecs_(query, graphSpecs)',
+          value: () => [
+            new Dimension('Device', 'bot'),
+            new Dimension('Browser', 'browser'),
+            new Dimension('Proccess', 'processes'),
+            new Dimension('Story', 'storyPath'),
+            new Dimension('Metric', 'metricPath'),
+          ],
+        },
+
+        dimensionToValues: {
+            type: Object,
+            computed: 'dimensionToValues_(graphSpecs, dimensions)',
+        },
+
+        matchingValues: {
+          type: Array,
+          computed: 'matchingValues_(query, dimensionToValues)',
+        },
+
+        selectedGraphSpecs: {
+          type: Map,
+          computed: 'selectedGraphSpecs_(selectedValues)',
         },
 
         selectedPathsAndSeries: {
-          type Array,
+          type: Array,
           value: () => [],
         },
       },
 
-      set subtestDict(dict) {
-        var flattenedDict = [...this.flattenSubtestDict_(dict)];
-        var bot = 'android-nexus5';
+      updateSubtestDict: function(bot, subtestDict) {
+        var flattenedDict = [...this.flattenSubtestDict_(subtestDict)];
         this.graphSpecs = flattenedDict.map(function(entry) {
           return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
         });
       },
 
-      set subtestDict(dict) {
-        var flattenedDict = [...this.flattenSubtestDict_(dict)];
-        var bot = 'android-nexus5';
-        this.graphSpecs = flattenedDict.map(function(entry) {
-          return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
-        });
-      },
-
-      matchingGraphSpecs_: function(query, graphSpecs) {
+      matchingValues_: function(query, dimensionToValues) {
         if (query === '') {
           return [];
         }
-        var selector = new FuzzySelect(graphSpecs, (spec) => spec.humanName);
+        var values = [].concat.apply([], Object.values(dimensionToValues));
+        console.log(values);
+        var selector = new FuzzySelect(values, (value) => value.label);
         var matches = selector.filter(query);
         return matches.slice(0, 30);
       },
 
+      /**
+       * The graphs specs selected by the user.
+       */
+      selectedGraphSpecs_: function(selectedValues) {
+        return [];
+      },
+
+      /**
+       * Template helper to get the length of an array.
+       */
       length_: function(arr) {
         return arr.length;
       },
@@ -220,6 +301,38 @@ found in the LICENSE file.
         event.dataTransfer.setData('type', 'seriesdnd');
         event.dataTransfer.setData('data', JSON.stringify(testPathAndSeries));
         event.dataTransfer.effectAllowed = 'copy';
+      },
+
+      isSelectedValue_: function(dimensionId, valueId) {
+        return false;
+      },
+
+      dimensionToValues_: function(graphSpecs, dimensions) {
+        var idToSet = {};
+        var pool = new ArrayPool();
+        dimensions.forEach((d) => { idToSet[d.id] = new Set(); });
+        for (var spec of graphSpecs) {
+          for (var dimension of dimensions) {
+            var valuePath = spec[dimension.id];
+            if (typeof valuePath == 'string') valuePath = [valuePath];
+            valuePath = pool.deduplicate(valuePath);
+            idToSet[dimension.id].add(valuePath);
+          }
+        }
+        var idToArray = {};
+        for (var id in idToSet) {
+          idToArray[id] = Array.from(idToSet[id]).map((valueId) => new Value(valueId, new Dimension('Foo', 'foo')));
+          idToArray[id].sort((a, b) => {
+            if (a.label < b.label) return -1;
+            if (a.label > b.label) return 1;
+            return 0;
+          });
+        }
+        return idToArray;
+      },
+
+      getValuesForDimension_: function(dimensionId) {
+        return this.dimensionToValues[dimensionId];
       },
 
       flattenSubtestDict_: function* (subtestDict) {
