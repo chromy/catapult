@@ -62,7 +62,7 @@ found in the LICENSE file.
               <input
                   type="checkbox"
                   id="{{value.id}}"
-                  checked="{{isSelectedValue_(value)}}" 
+                  checked="[[isSelectedValue_(valueIdToSelected.*, value)]]" 
                   on-change="handleCheckboxChanged_" 
                   style="vertical-align: middle;"></input>
               <label for$="{{value.id}}">
@@ -81,7 +81,7 @@ found in the LICENSE file.
                   <input
                       type="checkbox"
                       id="{{dimension.id}}-{{value.id}}"
-                      checked="{{isSelectedValue_(value)}}" 
+                      checked="[[isSelectedValue_(valueIdToSelected.*, value)]]" 
                       on-change="handleCheckboxChanged_" 
                       style="vertical-align: middle;"></input>
                   <label for$="{{dimension.id}}-{{value.id}}">
@@ -143,6 +143,19 @@ found in the LICENSE file.
     };
 
     var Value = function(path, dimension) {
+      function check(name, v) {
+        if (v === undefined) {
+          throw new Error('In Value "' + name + '" undefined.');
+        }
+        return v;
+      }
+      this.path = check('path', path);
+      this.dimension = check('dimension', dimension);
+      this.id = this.path.join('-');
+      this.label = this.path.join(' / ');
+    };
+
+    var Selection = function(value) {
       function check(name, v) {
         if (v === undefined) {
           throw new Error('In Value "' + name + '" undefined.');
@@ -246,13 +259,6 @@ found in the LICENSE file.
           value: () => { return {}; },
         },
 
-        blah: {
-          type: Object,
-          notify: true,
-          value: () => {},
-        },
-
-
         matchingValues: {
           type: Array,
           computed: 'matchingValues_(query, dimensionToValues)',
@@ -275,13 +281,6 @@ found in the LICENSE file.
           return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
         });
       },
-      
-      ready: function() {
-        console.log(this.valueIdToSelected);
-        console.log(this.blah);
-        console.log(this.get('valueIdToSelected'));
-        console.log(this.get('blah'));
-      },
 
       matchingValues_: function(query, dimensionToValues) {
         if (query === '') {
@@ -297,7 +296,7 @@ found in the LICENSE file.
        * The graphs specs selected by the user.
        */
       selectedGraphSpecs_: function(selectedValues) {
-        this.dimensionToValues.values();
+        var selectedValues = this.dimensionToValues.values();
         this.product_();
         return [];
       },
@@ -340,24 +339,10 @@ found in the LICENSE file.
       handleCheckboxChanged_(e) {
         var checked = e.target.checked;
         var value = e.model.value;
-        console.log(checked);
-        console.log('q1', this.get('query'));
-        console.log('q2', this.query);
-        console.log('before blah', this.get('blah'));
-        console.log('before', this.get('valueIdToSelected'));
-        console.log('before foo', this.get(['valueIdToSelected', 'foo']));
-        this.set(['valueIdToSelected', 'foo'], checked);
-        this.set('valueIdToSelected.' + value.id, checked);
-        this.set(['blah', 'bar'], checked);
-        console.log('after', this.get('valueIdToSelected'));
-        console.log('after foo', this.get(['valueIdToSelected', 'foo']));
-        console.log('after blah', this.get('blah'));
-        console.log('checked', value, this.get('valueIdToSelected.' + value.id));
-        console.log('valueIdToSelected.' + value.id);
-        console.log(this);
+        this.set(['valueIdToSelected', value.id], checked);
       },
 
-      isSelectedValue_: function(value) {
+      isSelectedValue_: function(_valueIdToSelected, value) {
         var selected = this.get(['valueIdToSelected', value.id]);
         if (selected === undefined) return false;
         return selected;
