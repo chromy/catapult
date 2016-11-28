@@ -62,6 +62,8 @@ found in the LICENSE file.
               <input
                   type="checkbox"
                   id="{{value.id}}"
+                  checked="{{isSelectedValue_(value)}}" 
+                  on-change="handleCheckboxChanged_" 
                   style="vertical-align: middle;"></input>
               <label for$="{{value.id}}">
                   {{value.dimension.label}}: {{value.label}}
@@ -79,6 +81,8 @@ found in the LICENSE file.
                   <input
                       type="checkbox"
                       id="{{dimension.id}}-{{value.id}}"
+                      checked="{{isSelectedValue_(value)}}" 
+                      on-change="handleCheckboxChanged_" 
                       style="vertical-align: middle;"></input>
                   <label for$="{{dimension.id}}-{{value.id}}">
                     {{value.label}}
@@ -207,6 +211,7 @@ found in the LICENSE file.
 
     Polymer({
       is: 'memory-test-picker',
+
       properties: {
         query: {
           type: String,
@@ -231,9 +236,22 @@ found in the LICENSE file.
         },
 
         dimensionToValues: {
-            type: Object,
-            computed: 'dimensionToValues_(graphSpecs, dimensions)',
+          type: Object,
+          computed: 'dimensionToValues_(graphSpecs, dimensions)',
         },
+
+        valueIdToSelected: {
+          type: Object,
+          notify: true,
+          value: () => { return {}; },
+        },
+
+        blah: {
+          type: Object,
+          notify: true,
+          value: () => {},
+        },
+
 
         matchingValues: {
           type: Array,
@@ -241,7 +259,7 @@ found in the LICENSE file.
         },
 
         selectedGraphSpecs: {
-          type: Map,
+          type: Object,
           computed: 'selectedGraphSpecs_(selectedValues)',
         },
 
@@ -257,13 +275,19 @@ found in the LICENSE file.
           return MemoryGraphSpec.fromFlattenedSubtestDictEntry(bot, entry);
         });
       },
+      
+      ready: function() {
+        console.log(this.valueIdToSelected);
+        console.log(this.blah);
+        console.log(this.get('valueIdToSelected'));
+        console.log(this.get('blah'));
+      },
 
       matchingValues_: function(query, dimensionToValues) {
         if (query === '') {
           return [];
         }
-        var values = [].concat.apply([], Object.values(dimensionToValues));
-        console.log(values);
+        var values = [].concat.apply([], Array.from(dimensionToValues.values()));
         var selector = new FuzzySelect(values, (value) => value.label);
         var matches = selector.filter(query);
         return matches.slice(0, 30);
@@ -273,6 +297,8 @@ found in the LICENSE file.
        * The graphs specs selected by the user.
        */
       selectedGraphSpecs_: function(selectedValues) {
+        this.dimensionToValues.values();
+        this.product_();
         return [];
       },
 
@@ -283,6 +309,22 @@ found in the LICENSE file.
         return arr.length;
       },
 
+      product_: function() {
+        if (arguments.length === 1) {
+          return arguments[0].map((x) => [x]);
+        }
+        var args = Array.from(arguments);
+        var xs  = args.shift();
+        var yss = this.product_.apply(this, args);
+        var results = [];
+        for (x of xs) {
+          for (ys of yss) {
+            results.push([x].concat(ys));
+          }
+        }
+        return results;
+      },
+
       /**
        * Handler for adding a new graph.
        */
@@ -290,6 +332,35 @@ found in the LICENSE file.
         var item = e.model.item;
         var pathAndSeries = item.testPathAndSeries;
         this.push('selectedPathsAndSeries', pathAndSeries);
+      },
+
+      /**
+       * Handler for adding a new graph.
+       */
+      handleCheckboxChanged_(e) {
+        var checked = e.target.checked;
+        var value = e.model.value;
+        console.log(checked);
+        console.log('q1', this.get('query'));
+        console.log('q2', this.query);
+        console.log('before blah', this.get('blah'));
+        console.log('before', this.get('valueIdToSelected'));
+        console.log('before foo', this.get(['valueIdToSelected', 'foo']));
+        this.set(['valueIdToSelected', 'foo'], checked);
+        this.set('valueIdToSelected.' + value.id, checked);
+        this.set(['blah', 'bar'], checked);
+        console.log('after', this.get('valueIdToSelected'));
+        console.log('after foo', this.get(['valueIdToSelected', 'foo']));
+        console.log('after blah', this.get('blah'));
+        console.log('checked', value, this.get('valueIdToSelected.' + value.id));
+        console.log('valueIdToSelected.' + value.id);
+        console.log(this);
+      },
+
+      isSelectedValue_: function(value) {
+        var selected = this.get(['valueIdToSelected', value.id]);
+        if (selected === undefined) return false;
+        return selected;
       },
 
       /**
@@ -303,26 +374,22 @@ found in the LICENSE file.
         event.dataTransfer.effectAllowed = 'copy';
       },
 
-      isSelectedValue_: function(dimensionId, valueId) {
-        return false;
-      },
-
       dimensionToValues_: function(graphSpecs, dimensions) {
-        var idToSet = {};
+        var dimenToSet = new Map();
         var pool = new ArrayPool();
-        dimensions.forEach((d) => { idToSet[d.id] = new Set(); });
+        dimensions.forEach((d) => { dimenToSet.set(d, new Set()); });
         for (var spec of graphSpecs) {
           for (var dimension of dimensions) {
             var valuePath = spec[dimension.id];
             if (typeof valuePath == 'string') valuePath = [valuePath];
             valuePath = pool.deduplicate(valuePath);
-            idToSet[dimension.id].add(valuePath);
+            dimenToSet.get(dimension).add(valuePath);
           }
         }
-        var idToArray = {};
-        for (var id in idToSet) {
-          idToArray[id] = Array.from(idToSet[id]).map((valueId) => new Value(valueId, new Dimension('Foo', 'foo')));
-          idToArray[id].sort((a, b) => {
+        var idToArray = new Map();
+        for (var dimen of dimenToSet.keys()) {
+          idToArray.set(dimen.id, Array.from(dimenToSet.get(dimen)).map((valueId) => new Value(valueId, dimen)));
+          idToArray.get(dimen.id).sort((a, b) => {
             if (a.label < b.label) return -1;
             if (a.label > b.label) return 1;
             return 0;
@@ -332,7 +399,7 @@ found in the LICENSE file.
       },
 
       getValuesForDimension_: function(dimensionId) {
-        return this.dimensionToValues[dimensionId];
+        return this.dimensionToValues.get(dimensionId);
       },
 
       flattenSubtestDict_: function* (subtestDict) {
