@@ -57,7 +57,7 @@ found in the LICENSE file.
               label="Filter"
               value="{{query}}">
           </paper-input>
-          <template is="dom-repeat" items="{{matchingValues}}" as="value">
+          <template is="dom-repeat" items="{{series}}" as="value">
             <div>
               <input
                   type="checkbox"
@@ -76,7 +76,7 @@ found in the LICENSE file.
           <template is="dom-repeat" items="{{dimensions}}" as="dimension">
             <div class="dimension">
               {{dimension.label}}
-              <template is="dom-repeat" items="{{getValuesForDimension_(dimension.id)}}" as="value">
+              <template is="dom-repeat" items="{{selected}}" as="value">
                 <div>
                   <input
                       type="checkbox"
@@ -151,22 +151,23 @@ found in the LICENSE file.
       }
       this.path = check('path', path);
       this.dimension = check('dimension', dimension);
-      this.id = this.path.join('-');
+      this.id = this.dimension.id + '.' + this.path.join('-');
       this.label = this.path.join(' / ');
     };
 
     var Selection = function(value) {
       function check(name, v) {
         if (v === undefined) {
-          throw new Error('In Value "' + name + '" undefined.');
+          throw new Error('In Selection"' + name + '" undefined.');
         }
         return v;
       }
-      this.path = check('path', path);
-      this.dimension = check('dimension', dimension);
-      this.id = this.path.join('-');
-      this.label = this.path.join(' / ');
-    };
+      this.value = value;
+      this.dimension = this.value.dimension;
+      this.id = this.value.id;
+      this.selected = false;
+      this.disabled = false;
+    }
 
     var MemoryGraphSpec = function(config) {
       function check(name) {
@@ -246,6 +247,11 @@ found in the LICENSE file.
             new Dimension('Story', 'storyPath'),
             new Dimension('Metric', 'metricPath'),
           ],
+        },
+
+        selections: {
+          type: Object,
+          value: () => { return {}; },
         },
 
         dimensionToValues: {
